@@ -7,7 +7,7 @@ require (
 	google.golang.org/grpc v1.69.4
 )
 
-require github.com/OfficialEvsty/protos v0.0.3
+require github.com/OfficialEvsty/protos v0.0.4
 
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"sso/internal/app"
 	"sso/internal/config"
+	"syscall"
 )
 
 const (
@@ -31,11 +33,15 @@ func main() {
 		cfg.TokenTTL,
 	)
 
-	application.GRPCSrv.MustRun()
-
-	// TODO: инициализировать app
+	go application.GRPCSrv.MustRun()
 
 	// TODO: запустить gRPC-сервер приложения
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+
+	sign := <-stop
+	application.GRPCSrv.Stop()
+	log.Info("application stopped.", slog.String("signal", sign.String()))
 }
 
 func setupLogger(env string) *slog.Logger {

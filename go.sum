@@ -2,6 +2,8 @@ github.com/BurntSushi/toml v1.2.1 h1:9F2/+DoOYIOksmaJFPw1tGFy1eDnIJXg+UHjuD8lTak
 github.com/BurntSushi/toml v1.2.1/go.mod h1:CxXYINrC8qIiEnFrOxCa7Jy5BFHlXnUU2pbicEuybxQ=
 github.com/OfficialEvsty/protos v0.0.3 h1:Es/MCsmT4e6iC0PFR12SYeSZloM8qTJKAFklJS3jYWg=
 github.com/OfficialEvsty/protos v0.0.3/go.mod h1:dhcytUJQRR/8JGzqQGPtBdLPSigg4us5/MUygD0LRB0=
+github.com/OfficialEvsty/protos v0.0.4 h1:FKn0oWbyM1Bcu6yTAAYELKiE8AJSjI/3sYq+dEiVRd4=
+github.com/OfficialEvsty/protos v0.0.4/go.mod h1:XNOeoSzfIFEbJ8uaN4NAHdU/9gGNHkF0fgsKp/6CYBY=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
