@@ -39,6 +39,7 @@ func Register(gRPC *grpc.Server, auth Auth) {
 	ssov1.RegisterAuthServer(gRPC, &serverAPI{auth: auth})
 }
 
+// Login's handler
 func (s *serverAPI) Login(
 	ctx context.Context,
 	req *ssov1.LoginRequest,
@@ -65,16 +66,39 @@ func (s *serverAPI) Login(
 	}, nil
 }
 
+// Register's handler
 func (s *serverAPI) Register(
 	ctx context.Context,
 	req *ssov1.RegisterRequest,
 ) (*ssov1.RegisterResponse, error) {
-	panic("implement me")
+	if req.GetEmail() == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing email")
+	}
+	if req.GetPassword() == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing password")
+	}
+
+	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
+	if err != nil {
+		// TODO: ERROR
+		return nil, status.Error(codes.Internal, "permission denied")
+	}
+	return &ssov1.RegisterResponse{UserId: userID}, nil
 }
 
+// Is Admin handler
 func (s *serverAPI) IsAdmin(
 	ctx context.Context,
 	req *ssov1.IsAdminRequest,
 ) (*ssov1.IsAdminResponse, error) {
-	panic("implement me")
+	if req.GetUserId() <= emptyValue {
+		return nil, status.Error(codes.InvalidArgument, "wrong or negative user id")
+	}
+
+	isAdmin, err := s.auth.IsAdmin(ctx, req.GetUserId())
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, "permission denied")
+	}
+
+	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
 }
