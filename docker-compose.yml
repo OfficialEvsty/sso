@@ -9,6 +9,7 @@ services:
       PGDATA: "/var/lib/postgresql/data/sso_data"
     volumes:
       - ./pgdata:/var/lib/postgresql/data/sso_data/
+      - ./pg_notify:/var/lib/postgresql/data/sso_data/
     ports:
       - "5433:5432"
     deploy:

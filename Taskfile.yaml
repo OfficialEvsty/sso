@@ -16,4 +16,4 @@ tasks:
       dbname: '{{.dbname| default "sso_db"}}'
       mpath: '{{.mpath| default "./migrations"}}'
     cmds:
-      - go run ./cmd/migrator --storage-path={{.user}}:{{.pass}}@{{.host}}:{{port}}/{{.dbname}} --migrations-path={{.mpath}}
+      - go run ./cmd/migrator --storage-path={{.user}}:{{.pass}}@{{.host}}:{{.port}}/{{.dbname}} --migrations-path={{.mpath}}

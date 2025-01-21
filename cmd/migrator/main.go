@@ -10,11 +10,11 @@ import (
 )
 
 func main() {
-	var storagePath, migrationsPath, migrationsTable string
+	var storagePath, migrationsPath, migrationsTable string = "postgres:postgres@localhost:5433/sso_db", "./migrations", ""
 
 	flag.StringVar(&storagePath, "storage-path", "", "Path to a directory containing migration files")
 	flag.StringVar(&migrationsPath, "migrations-path", "", "Path to a directory containing migration files")
-	flag.StringVar(&migrationsTable, "migrations-table", "", "Path to a table containing migration files")
+	flag.StringVar(&migrationsTable, "migrations-table", "migrations", "name of migrations table")
 	flag.Parse()
 
 	if storagePath == "" {
@@ -27,7 +27,7 @@ func main() {
 
 	m, err := migrate.New(
 		"file://"+migrationsPath,
-		fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=di", storagePath, migrationsTable))
+		fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=disable", storagePath, migrationsTable))
 	if err != nil {
 		panic(err)
 	}
@@ -38,4 +38,5 @@ func main() {
 			return
 		}
 	}
+	fmt.Println("migrations completed successfully")
 }

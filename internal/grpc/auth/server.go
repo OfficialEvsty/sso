@@ -51,7 +51,6 @@ func (s *serverAPI) Login(
 	if req.GetPassword() == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing password")
 	}
-
 	if req.GetAppId() == emptyValue {
 		return nil, status.Error(codes.InvalidArgument, "missing app id")
 	}
