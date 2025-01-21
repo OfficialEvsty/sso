@@ -1,0 +1,19 @@
+version: "3"
+
+tasks:
+  default:
+    cmds:
+      - task: init_migrator
+  migrate:
+    aliases:
+      - inimi
+    desc: "Initialize migrator with migration's path and storage path"
+    vars:
+      user: '{{.user| default "postgres"}}'
+      pass: '{{.pass| default "postgres"}}'
+      host: '{{.host| default "localhost"}}'
+      port: '{{.port| default "5432"}}'
+      dbname: '{{.dbname| default "sso_db"}}'
+      mpath: '{{.mpath| default "./migrations"}}'
+    cmds:
+      - go run ./cmd/migrator --storage-path={{.user}}:{{.pass}}@{{.host}}:{{port}}/{{.dbname}} --migrations-path={{.mpath}}
