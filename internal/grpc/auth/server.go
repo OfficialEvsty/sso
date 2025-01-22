@@ -6,10 +6,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
-
-const (
-	emptyValue = 0
+	"sso/internal/services/auth"
 )
 
 type Auth interface {
@@ -30,13 +27,17 @@ type Auth interface {
 	) (bool, error)
 }
 
+const (
+	emptyValue = 0
+)
+
 type serverAPI struct {
 	ssov1.UnimplementedAuthServer
-	auth Auth
+	auth auth.Auth
 }
 
-func Register(gRPC *grpc.Server, auth Auth) {
-	ssov1.RegisterAuthServer(gRPC, &serverAPI{auth: auth})
+func Register(gRPC *grpc.Server, auth *auth.Auth) {
+	ssov1.RegisterAuthServer(gRPC, &serverAPI{auth: *auth})
 }
 
 // Login's handler
@@ -54,7 +55,7 @@ func (s *serverAPI) Login(
 	if req.GetAppId() == emptyValue {
 		return nil, status.Error(codes.InvalidArgument, "missing app id")
 	}
-	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
+	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}

@@ -1,13 +1,13 @@
 CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
-    hash_pass BLOB NOT NULL
-)
+    hash_pass VARCHAR(255) NOT NULL
+);
 
-CREATE INDEX IF NOT EXISTS idx_email ON users (email)
+CREATE INDEX IF NOT EXISTS idx_email ON users (email);
 
 CREATE TABLE IF NOT EXISTS apps(
-    id INTEGER PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     secret TEXT NOT NULL UNIQUE
-)
+);

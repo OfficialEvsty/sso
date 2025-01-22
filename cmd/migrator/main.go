@@ -37,6 +37,10 @@ func main() {
 			fmt.Println("No migrations found")
 			return
 		}
+		if err = m.Down(); err != nil {
+			panic(err)
+		}
+		fmt.Println("migrations are probably cracked, check it")
 	}
 	fmt.Println("migrations completed successfully")
 }
