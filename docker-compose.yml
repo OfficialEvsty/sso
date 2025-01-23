@@ -3,6 +3,7 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres_container
+    env_file: ".env"
     environment:
       POSTGRES_USER: $DB_USER
       POSTGRES_PASSWORD: $DB_PASS
@@ -29,10 +30,27 @@ services:
                      -c checkpoint_completion_target=0.7
                      -c wal_buffers=16MB
                      -c default_statistics_target=100
+  migrator:
+    build:
+      context: ./cmd/migrator
+    depends_on:
+      - postgres
+    env_file: ".env"
+    environment:
+      DB_USER: $DB_USER
+      DB_PASS: $DB_PASS
+      DB_HOST: $DB_HOST
+      DB_PORT: $DB_PORT
+      DB_NAME: $DB_NAME
+    networks:
+      - sso-network
   sso:
     build:
       context: ./sso
-    container-name: sso-container
+    depends_on:
+      - postgres
+      - migrator
+    env_file: ".env"
     environment:
       DB_USER: $DB_USER
       DB_PASS: $DB_PASS

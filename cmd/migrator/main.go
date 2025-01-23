@@ -7,6 +7,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"os"
 )
 
 func main() {
@@ -25,11 +26,24 @@ func main() {
 		panic("migrations-path is required")
 	}
 
-	m, err := migrate.New(
-		"file://"+migrationsPath,
-		fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=disable", storagePath, migrationsTable))
-	if err != nil {
-		panic(err)
+	var m = &migrate.Migrate{}
+	var err error
+	if storagePath != "" {
+		m, err = migrate.New(
+			"file://"+migrationsPath,
+			fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=disable", storagePath, migrationsTable))
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(m)
+	} else {
+		m, err := migrate.New(
+			"file://"+migrationsPath,
+			fmt.Sprintf("postgres://%s:%s@%s:%s/%s?x-migrations-table=%s&sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME"), migrationsTable))
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(m)
 	}
 
 	if err := m.Up(); err != nil {

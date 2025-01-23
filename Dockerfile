@@ -5,7 +5,6 @@ WORKDIR /sso
 COPY cmd/ /sso/cmd/
 COPY config/ /sso/config/
 COPY internal/ /sso/internal/
-COPY migrations/ /sso/migrations/
 
 ADD go.mod /sso/
 
@@ -21,7 +20,7 @@ WORKDIR /sso
 
 COPY --from=builder /sso /sso/
 
-LABEL version="v0.5.1" author="OfficialEvsty" desc="Auth service"
+LABEL version="v0.5.2" author="OfficialEvsty" desc="Auth service"
 
 # ENV
 
