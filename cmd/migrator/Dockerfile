@@ -1,15 +1,23 @@
 FROM golang:alpine AS builder
 
 WORKDIR /sso
-RUN ls /sso -R
-COPY ../../cmd /sso/cmd/
-COPY ../../migrations/ /sso/migrations/
 
-RUN export GO111MODULE="on" && go mod tidy
+COPY . /sso/
 
-# COPY ["cmd", "config", "internal", "migrations", "./"]
+COPY ./migrations /sso/migrations/
 
-RUN go build -o /sso /sso/cmd/migrator/main.go
+# Инициализируем go.mod
+RUN go mod init github.com/OfficialEvsty/migrator
+
+RUN go mod tidy
+# RUN go get "github.com/golang-migrate/migrate/v4" && go get "github.com/golang-migrate/migrate/v4/database/postgres" && go get "github.com/golang-migrate/migrate/v4/source/file"
+
+# Добавляем необходимые зависимости в go.mod
+RUN go get github.com/golang-migrate/migrate/v4
+RUN go get github.com/golang-migrate/migrate/v4/database/postgres
+RUN go get github.com/golang-migrate/migrate/v4/source/file
+
+RUN go build -o /sso ./main.go
 
 FROM alpine
 
@@ -22,3 +30,4 @@ LABEL version="v0.0.1" author="OfficialEvsty" desc="Migrator service"
 # ENV
 
 ENTRYPOINT ["/sso/main"]
+CMD ["--migrations-path", "migrations"]

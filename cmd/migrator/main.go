@@ -8,6 +8,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"os"
+	"time"
 )
 
 func main() {
@@ -17,33 +18,22 @@ func main() {
 	flag.StringVar(&migrationsPath, "migrations-path", "", "Path to a directory containing migration files")
 	flag.StringVar(&migrationsTable, "migrations-table", "migrations", "name of migrations table")
 	flag.Parse()
-
+	time.Sleep(2 * time.Second)
 	if storagePath == "" {
-		panic("storage-path is required")
+		storagePath = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?x-migrations-table=%s&sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME"), migrationsTable)
+	} else {
+		storagePath = fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=disable", storagePath, migrationsTable)
 	}
 
 	if migrationsPath == "" {
 		panic("migrations-path is required")
 	}
 
-	var m = &migrate.Migrate{}
-	var err error
-	if storagePath != "" {
-		m, err = migrate.New(
-			"file://"+migrationsPath,
-			fmt.Sprintf("postgres://%s?x-migrations-table=%s&sslmode=disable", storagePath, migrationsTable))
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(m)
-	} else {
-		m, err := migrate.New(
-			"file://"+migrationsPath,
-			fmt.Sprintf("postgres://%s:%s@%s:%s/%s?x-migrations-table=%s&sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_PASS"), os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME"), migrationsTable))
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(m)
+	m, err := migrate.New(
+		"file://"+migrationsPath,
+		storagePath)
+	if err != nil {
+		panic(err)
 	}
 
 	if err := m.Up(); err != nil {
