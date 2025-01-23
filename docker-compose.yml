@@ -1,17 +1,18 @@
+# Build and configuration of database image and app Dockerfile in containers
 services:
   postgres:
     image: postgres:latest
     container_name: postgres_container
     environment:
-      POSTGRES_USER: "postgres"
-      POSTGRES_PASSWORD: "postgres"
-      POSTGRES_DB: "sso_db"
+      POSTGRES_USER: $DB_USER
+      POSTGRES_PASSWORD: $DB_PASS
+      POSTGRES_DB: $DB_NAME
       PGDATA: "/var/lib/postgresql/data/sso_data"
     volumes:
       - ./pgdata:/var/lib/postgresql/data/sso_data/
       - ./pg_notify:/var/lib/postgresql/data/sso_data/
     ports:
-      - "5433:5432"
+      - $DB_PORT
     deploy:
       resources:
         limits:
@@ -28,6 +29,23 @@ services:
                      -c checkpoint_completion_target=0.7
                      -c wal_buffers=16MB
                      -c default_statistics_target=100
+  sso:
+    build:
+      context: ./sso
+    container-name: sso-container
+    environment:
+      DB_USER: $DB_USER
+      DB_PASS: $DB_PASS
+      DB_HOST: $DB_HOST
+      DB_PORT: $DB_PORT
+      DB_NAME: $DB_NAME
+    ports:
+      - $SSO_PORT:$SSO_PORT
+    networks:
+      - sso-network
 volumes:
   pgdata:
     driver: local
+networks:
+  sso-network:
+    driver: bridge

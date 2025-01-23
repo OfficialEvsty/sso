@@ -33,13 +33,13 @@ func getEnv(key string, defaultVal string) string {
 
 // Init initialize config instance
 func (c *config) Init(storagePath string) {
-	if storagePath != "" {
+	/*if storagePath != "" {
 		c.Path = storagePath
-	}
-	c.Host = getEnv("HOST", "localhost")
-	c.Port = getEnv("PORT", "5432")
-	c.Username = getEnv("USER", "postgres")
-	c.Password = getEnv("PASS", "postgres")
+	}*/
+	c.Host = getEnv("DB_HOST", "localhost")
+	c.Port = getEnv("DB_PORT", "5432")
+	c.Username = getEnv("DB_USER", "postgres")
+	c.Password = getEnv("DB_PASS", "postgres")
 	c.Database = getEnv("DB_NAME", "sso_db")
 }
 
@@ -61,13 +61,13 @@ func New(storagePath string) (*Storage, error) {
 // getConnString Constructing database connection string
 func getConnString(conf config) string {
 	var result string
-	if conf.Path != "" {
+	/*if conf.Path != "" {
 		result = fmt.Sprintf("postgres://" + conf.Path + "?sslmode=disable")
-		fmt.Println(result)
+		//fmt.Println(result)
 		return result
-	}
+	}*/
 	result = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", conf.Username, conf.Password, conf.Host, conf.Port, conf.Database)
-	fmt.Println(result)
+	//fmt.Println(result)
 	return result
 }
 
@@ -100,10 +100,10 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 }
 
 // User gets user from db by specified his email
-func (s *Storage) User(ctx context.Context, email string) (*models.User, error) {
+func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	pool, err := pgxpool.New(ctx, getConnString(s.conf))
 	if err != nil {
-		return nil, err
+		return models.User{}, err
 	}
 	var user models.User
 	row := pool.QueryRow(
@@ -115,12 +115,12 @@ func (s *Storage) User(ctx context.Context, email string) (*models.User, error) 
 	err = row.Scan(&user.ID, &user.Email, &user.PassHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, storage.ErrUserNotExist
+			return models.User{}, storage.ErrUserNotExist
 		}
-		return nil, err
+		return models.User{}, err
 	}
 
-	return &user, nil
+	return user, nil
 }
 
 // IsAdmin checks whether this user an admin
@@ -146,26 +146,24 @@ func (s *Storage) IsAdmin(ctx context.Context, userID int64) (isAdmin bool, err 
 	return true, nil
 }
 
-func (s *Storage) App(ctx context.Context, appID int32) (*models.App, error) {
+func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 	const op = "storage.postgres.App"
-	var pool *pgxpool.Pool
 	var app models.App
-	defer pool.Close()
 	pool, err := pgxpool.New(ctx, getConnString(s.conf))
 	if err != nil {
-		return nil, err
+		return models.App{}, err
 	}
-
+	defer pool.Close()
 	row := pool.QueryRow(
 		ctx,
-		"SELECT * FROM apps WHERE id = &1",
+		"SELECT * FROM apps WHERE id = $1",
 		appID)
 	err = row.Scan(&app.ID, &app.Name, &app.Secret)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, storage.ErrAppNotFound
+			return models.App{}, storage.ErrAppNotFound
 		}
-		return nil, err
+		return app, err
 	}
-	return &app, err
+	return app, err
 }

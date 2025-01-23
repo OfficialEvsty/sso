@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -57,6 +58,7 @@ func (s *serverAPI) Login(
 	}
 	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
+		fmt.Print(err.Error())
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
 	// TODO: implement login via auth service

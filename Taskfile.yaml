@@ -15,5 +15,19 @@ tasks:
       port: '{{.port| default "5432"}}'
       dbname: '{{.dbname| default "sso_db"}}'
       mpath: '{{.mpath| default "./migrations"}}'
+      mtable: '{{.mtable| default "migrations"}}'
     cmds:
-      - go run ./cmd/migrator --storage-path={{.user}}:{{.pass}}@{{.host}}:{{.port}}/{{.dbname}} --migrations-path={{.mpath}}
+      - go run ./cmd/migrator --storage-path={{.user}}:{{.pass}}@{{.host}}:{{.port}}/{{.dbname}} --migrations-path={{.mpath}} --migrations-table={{.mtable}}
+  sql-connect:
+    aliases:
+      - sqlc
+    desc: "Connect to database with psql tool"
+    vars:
+      provider: '{{.provider| default "postgres://"}}'
+      user: '{{.user| default "postgres"}}'
+      pass: '{{.pass| default "postgres"}}'
+      host: '{{.host| default "localhost"}}'
+      port: '{{.port| default "5433"}}'
+      dbname: '{{.dbname| default "sso_db"}}'
+    cmds:
+      - psql {{.provider}}{{.user}}:{{.pass}}@{{.host}}:{{.port}}/{{.dbname}}?sslmode=disable

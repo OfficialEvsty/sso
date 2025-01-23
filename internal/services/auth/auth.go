@@ -29,12 +29,12 @@ type UserStorage interface {
 }
 
 type UserProvider interface {
-	User(ctx context.Context, email string) (user *models.User, err error)
+	User(ctx context.Context, email string) (user models.User, err error)
 	IsAdmin(ctx context.Context, uid int64) (isAdmin bool, err error)
 }
 
 type AppProvider interface {
-	App(ctx context.Context, appId int32) (app *models.App, err error)
+	App(ctx context.Context, appId int32) (app models.App, err error)
 }
 
 var (
@@ -87,12 +87,14 @@ func (a *Auth) Login(
 		return "", fmt.Errorf("%s: %w", op, err)
 	}
 
+	log.With(op).Info("user found")
+
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
 		a.log.Info("invalid credentials", err.Error())
 		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
-
+	log.Info("token generated successfully")
 	app, err := a.appProvider.App(ctx, appID)
 	if err != nil {
 		if errors.Is(err, storage.ErrAppNotFound) {
@@ -103,7 +105,7 @@ func (a *Auth) Login(
 
 	log.Info("user logged in successfully")
 
-	token, err := jwt.NewToken(*user, *app, a.tokenTTL)
+	token, err := jwt.NewToken(user, app, a.tokenTTL)
 	if err != nil {
 		a.log.Error("failed to generate token", err.Error())
 		return "", fmt.Errorf("%s: %w", op, err)

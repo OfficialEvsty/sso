@@ -1,0 +1,6 @@
+env: "local" #dev, prod #currently unused
+conn_string: "gfff"
+token_ttl: 1h
+grpc:
+  port: 44043
+  timeout: 1h
