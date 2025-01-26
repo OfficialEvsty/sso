@@ -1,6 +1,7 @@
 env: "local" #dev, prod
 conn_string: "postgres:postgres@localhost:5433/sso_db" #currently unused
-token_ttl: 1h
+token_ttl: 15m
+refresh_token_ttl: 24h
 grpc:
   port: 44043
   timeout: 1h

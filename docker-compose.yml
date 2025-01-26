@@ -4,6 +4,8 @@ services:
     image: postgres:latest
     container_name: postgres_container
     env_file: ".env"
+    networks:
+      - sso-network
     environment:
       POSTGRES_USER: $DB_USER
       POSTGRES_PASSWORD: $DB_PASS
@@ -13,7 +15,7 @@ services:
       - ./pgdata:/var/lib/postgresql/data/sso_data/
       - ./pg_notify:/var/lib/postgresql/data/sso_data/
     ports:
-      - $DB_PORT
+      - $DB_PORT:$DB_PORT
     deploy:
       resources:
         limits:
@@ -46,7 +48,7 @@ services:
       - sso-network
   sso:
     build:
-      context: ./sso
+      context: .
     depends_on:
       - postgres
       - migrator

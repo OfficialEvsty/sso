@@ -105,7 +105,7 @@ func (a *Auth) Login(
 
 	log.Info("user logged in successfully")
 
-	token, err := jwt.NewToken(user, app, a.tokenTTL)
+	token, err := jwt.NewAccessToken(user, app, a.tokenTTL)
 	if err != nil {
 		a.log.Error("failed to generate token", err.Error())
 		return "", fmt.Errorf("%s: %w", op, err)
