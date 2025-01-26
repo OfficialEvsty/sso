@@ -14,12 +14,16 @@ func GenerateTokenPair(
 	app models.App,
 	duration time.Duration,
 ) (refresh string, access string, err error) {
+	access, err = NewAccessToken(user, app, duration)
+	if err != nil {
+		return "", "", err
+	}
 
-}
-
-// RefreshTokenPair refreshes both tokens access and refresh
-func RefreshTokenPair(refreshToken string) (refresh string, access string, err error) {
-
+	refresh, err = NewRefreshToken()
+	if err != nil {
+		return "", "", err
+	}
+	return refresh, access, nil
 }
 
 // NewAccessToken Creates auth-token for specified user and app with limited token's duration
@@ -53,5 +57,5 @@ func NewRefreshToken() (string, error) {
 	}
 
 	// Encrypting token in base64
-	return base64.URLEncoding.EncodeToString(token), err
+	return base64.URLEncoding.EncodeToString(token), nil
 }

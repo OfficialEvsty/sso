@@ -33,12 +33,12 @@ const (
 )
 
 type serverAPI struct {
-	ssov1.UnimplementedAuthServer
+	ssov1.UnimplementedAuthServiceServer
 	auth auth.Auth
 }
 
 func Register(gRPC *grpc.Server, auth *auth.Auth) {
-	ssov1.RegisterAuthServer(gRPC, &serverAPI{auth: *auth})
+	ssov1.RegisterAuthServiceServer(gRPC, &serverAPI{auth: *auth})
 }
 
 // Login's handler
@@ -56,7 +56,7 @@ func (s *serverAPI) Login(
 	if req.GetAppId() == emptyValue {
 		return nil, status.Error(codes.InvalidArgument, "missing app id")
 	}
-	token, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
+	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
 		fmt.Print(err.Error())
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
@@ -64,7 +64,8 @@ func (s *serverAPI) Login(
 	// TODO: implement login via auth service
 
 	return &ssov1.LoginResponse{
-		Token: token,
+		AccessToken:  access,
+		RefreshToken: refresh,
 	}, nil
 }
 

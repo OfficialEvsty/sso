@@ -13,11 +13,12 @@ import (
 )
 
 type Auth struct {
-	log         *slog.Logger
-	usrStorage  UserStorage
-	usrProvider UserProvider
-	appProvider AppProvider
-	tokenTTL    time.Duration
+	log           *slog.Logger
+	usrStorage    UserStorage
+	usrProvider   UserProvider
+	appProvider   AppProvider
+	tokenProvider TokenProvider
+	tokenTTL      time.Duration
 }
 
 type UserStorage interface {
@@ -35,6 +36,12 @@ type UserProvider interface {
 
 type AppProvider interface {
 	App(ctx context.Context, appId int32) (app models.App, err error)
+}
+
+type TokenProvider interface {
+	RefreshToken(ctx context.Context, token string) (refreshToken models.RefreshToken, err error)
+	RemoveRefreshToken(ctx context.Context, token string) (bool, error)
+	SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt int64) (int64, error)
 }
 
 var (
@@ -67,7 +74,7 @@ func (a *Auth) Login(
 	email string,
 	password string,
 	appID int32,
-) (string, error) {
+) (access string, refresh string, err error) {
 	const op = "auth.Login"
 
 	log := a.log.With(
@@ -82,9 +89,9 @@ func (a *Auth) Login(
 		if errors.Is(err, storage.ErrUserNotFound) {
 			a.log.Warn("user not found", err.Error())
 
-			return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 		}
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	log.With(op).Info("user found")
@@ -92,7 +99,7 @@ func (a *Auth) Login(
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
 		a.log.Info("invalid credentials", err.Error())
-		return "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
 	}
 	log.Info("token generated successfully")
 	app, err := a.appProvider.App(ctx, appID)
@@ -100,17 +107,18 @@ func (a *Auth) Login(
 		if errors.Is(err, storage.ErrAppNotFound) {
 			log.Error(storage.ErrAppNotFound.Error(), err.Error())
 		}
-		return "", fmt.Errorf("%s: %w", op, err)
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
 	log.Info("user logged in successfully")
 
-	token, err := jwt.NewAccessToken(user, app, a.tokenTTL)
+	access, refresh, err = jwt.GenerateTokenPair(user, app, a.tokenTTL)
+
 	if err != nil {
-		a.log.Error("failed to generate token", err.Error())
-		return "", fmt.Errorf("%s: %w", op, err)
+		a.log.Error("failed to generate tokens", err.Error())
+		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
-	return token, nil
+	return access, refresh, nil
 }
 
 // / Register a new user and hashed password
@@ -168,4 +176,19 @@ func (a *Auth) IsAdmin(
 	log.Info("checking if user is admin", slog.Bool("isAdmin", isAdmin))
 
 	return isAdmin, nil
+}
+
+// RefreshTokensPair refreshes both tokens access and refresh
+func (a *Auth) RefreshTokensPair(ctx context.Context, oldRefreshToken string) (refresh string, access string, err error) {
+	const op = "auth.RefreshTokensPair"
+	storedOldRefreshToken, err := a.tokenProvider.RefreshToken(
+		ctx,
+		oldRefreshToken,
+	)
+	if err != nil {
+		a.log.Error("failed to refresh token pair", err.Error(), op, oldRefreshToken)
+		return "", "", errors.New("failed to refresh token:" + err.Error())
+	}
+
+	return refresh, access, nil
 }

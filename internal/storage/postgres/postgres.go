@@ -150,10 +150,10 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 	const op = "storage.postgres.App"
 	var app models.App
 	pool, err := pgxpool.New(ctx, getConnString(s.conf))
+	defer pool.Close()
 	if err != nil {
 		return models.App{}, err
 	}
-	defer pool.Close()
 	row := pool.QueryRow(
 		ctx,
 		"SELECT * FROM apps WHERE id = $1",
@@ -166,4 +166,81 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 		return app, err
 	}
 	return app, err
+}
+
+// SaveRefreshToken saves token to storage
+func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt int64) (int64, error) {
+	pool, err := pgxpool.New(ctx, getConnString(s.conf))
+	defer pool.Close()
+	if err != nil {
+		return 0, errors.New("failed to connect to database")
+	}
+
+	row := pool.QueryRow(
+		ctx,
+		"INSERT INTO refresh_tokens(user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id",
+		userID,
+		token,
+		expiresAt,
+	)
+
+	var refreshTokenId int64
+	err = row.Scan(&refreshTokenId)
+	if err != nil {
+		return 0, errors.New("failed to save refresh token: " + err.Error())
+	}
+	return refreshTokenId, nil
+}
+
+// Get RefreshToken from db
+func (s *Storage) RefreshToken(ctx context.Context, token string) (models.RefreshToken, error) {
+	pool, err := pgxpool.New(ctx, getConnString(s.conf))
+	defer pool.Close()
+	if err != nil {
+		return models.RefreshToken{}, errors.New("failed to connect to database: " + err.Error())
+	}
+	var refreshToken models.RefreshToken
+	row := pool.QueryRow(ctx, "SELECT * FROM refresh_tokens WHERE token = $1", token)
+	err = row.Scan(&refreshToken)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.RefreshToken{}, errors.New("token not found: " + err.Error())
+		}
+		return models.RefreshToken{}, err
+	}
+	if refreshToken.ExpiresAt
+	return refreshToken, nil
+}
+
+// RemoveRefreshToken removes token from storage
+func (s *Storage) RemoveRefreshToken(ctx context.Context, token string) (bool, error) {
+	pool, err := pgxpool.New(ctx, getConnString(s.conf))
+	defer pool.Close()
+	if err != nil {
+		return false, errors.New("failed to connect to database")
+	}
+
+	row := pool.QueryRow(
+		ctx,
+		"SELECT id FROM refresh_tokens WHERE token = $1",
+		token,
+	)
+
+	var oldRefreshTokenId int64
+	err = row.Scan(&oldRefreshTokenId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, errors.New("failed to find refresh token to remove: " + err.Error())
+	}
+	var deleteResult bool
+	row = pool.QueryRow(ctx,
+		"DELETE FROM refresh_tokens WHERE id = $1",
+		oldRefreshTokenId)
+	err = row.Scan(&deleteResult)
+	if err != nil {
+		return false, errors.New("failed to delete refresh token: " + err.Error())
+	}
+	return deleteResult, nil
 }
