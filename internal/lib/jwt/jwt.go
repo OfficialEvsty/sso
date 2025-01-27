@@ -12,9 +12,9 @@ import (
 func GenerateTokenPair(
 	user models.User,
 	app models.App,
-	duration time.Duration,
+	accessDuration time.Duration,
 ) (refresh string, access string, err error) {
-	access, err = NewAccessToken(user, app, duration)
+	access, err = NewAccessToken(user, app, accessDuration)
 	if err != nil {
 		return "", "", err
 	}

@@ -31,6 +31,7 @@ func main() {
 		cfg.GRPC.Port,
 		cfg.StoragePath,
 		cfg.TokenTTL,
+		cfg.RefreshTokenTTL,
 	)
 
 	go application.GRPCSrv.MustRun()

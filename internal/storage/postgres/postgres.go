@@ -11,6 +11,7 @@ import (
 	"os"
 	"sso/internal/domain/models"
 	"sso/internal/storage"
+	"time"
 )
 
 // Private config for using inside postgres storage and open connections
@@ -45,7 +46,8 @@ func (c *config) Init(storagePath string) {
 
 // Storage instance for processing sql queries
 type Storage struct {
-	conf config
+	conf   config
+	dbPool *pgxpool.Pool
 }
 
 // New initialize an instance of storage db context
@@ -54,8 +56,17 @@ func New(storagePath string) (*Storage, error) {
 
 	conf := config{}
 	conf.Init(storagePath)
+	dbPool, err := pgxpool.New(context.Background(), getConnString(conf))
+	if err != nil {
+		return nil, errors.New("error connecting to database: " + err.Error())
+	}
 
-	return &Storage{conf: conf}, nil
+	return &Storage{conf: conf, dbPool: dbPool}, nil
+}
+
+// ends database pool connection
+func (s *Storage) CloseStorage() {
+	s.dbPool.Close()
 }
 
 // getConnString Constructing database connection string
@@ -75,18 +86,13 @@ func getConnString(conf config) string {
 func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
 	const op = "storage.postgres.SaveUser"
 
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	if err != nil {
-		return 0, err
-	}
 	var id int64
-	err = pool.QueryRow(
+	err := s.dbPool.QueryRow(
 		ctx,
 		"INSERT INTO users(email, hash_pass) values($1, $2) RETURNING id",
 		email,
 		passHash,
 	).Scan(&id)
-	defer pool.Close()
 	if err != nil {
 		var pgxError *pgconn.PgError
 		if errors.As(err, &pgxError) {
@@ -99,20 +105,33 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 	return id, nil
 }
 
-// User gets user from db by specified his email
-func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
+// UserById searches user in database by his ID
+func (s *Storage) UserById(ctx context.Context, userID int64) (models.User, error) {
+	var user models.User
+	row := s.dbPool.QueryRow(
+		ctx,
+		"SELECT * FROM users WHERE id = $1",
+		userID,
+	)
+	err := row.Scan(&user.ID, &user.Email, &user.PassHash)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, storage.ErrUserNotFound
+		}
 		return models.User{}, err
 	}
+	return user, nil
+}
+
+// User gets user from db by specified his email
+func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	var user models.User
-	row := pool.QueryRow(
+	row := s.dbPool.QueryRow(
 		ctx,
 		"SELECT * FROM users WHERE email = $1",
 		email,
 	)
-	defer pool.Close()
-	err = row.Scan(&user.ID, &user.Email, &user.PassHash)
+	err := row.Scan(&user.ID, &user.Email, &user.PassHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.User{}, storage.ErrUserNotExist
@@ -127,15 +146,9 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 func (s *Storage) IsAdmin(ctx context.Context, userID int64) (isAdmin bool, err error) {
 	const op = "storage.postgres.IsAdmin"
 
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	if err != nil {
-		return false, err
-	}
-
-	row := pool.QueryRow(ctx,
+	row := s.dbPool.QueryRow(ctx,
 		"SELECT * FROM admins WHERE user_id = $1",
 		userID)
-	defer pool.Close()
 	err = row.Scan(&isAdmin)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -149,16 +162,11 @@ func (s *Storage) IsAdmin(ctx context.Context, userID int64) (isAdmin bool, err 
 func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 	const op = "storage.postgres.App"
 	var app models.App
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	defer pool.Close()
-	if err != nil {
-		return models.App{}, err
-	}
-	row := pool.QueryRow(
+	row := s.dbPool.QueryRow(
 		ctx,
 		"SELECT * FROM apps WHERE id = $1",
 		appID)
-	err = row.Scan(&app.ID, &app.Name, &app.Secret)
+	err := row.Scan(&app.ID, &app.Name, &app.Secret)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return models.App{}, storage.ErrAppNotFound
@@ -168,15 +176,37 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 	return app, err
 }
 
-// SaveRefreshToken saves token to storage
-func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt int64) (int64, error) {
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	defer pool.Close()
-	if err != nil {
-		return 0, errors.New("failed to connect to database")
-	}
+// SaveToken saves refresh token to storage
+func (s *Storage) SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error {
+	if tx != nil {
+		_, err := tx.Exec(ctx,
+			"INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
+			userID,
+			token,
+			expiresAt,
+		)
 
-	row := pool.QueryRow(
+		if err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return errors.New("error rolling back transaction: " + err.Error())
+			}
+			return errors.New("error inserting refresh token's data: " + err.Error())
+		}
+
+		// Commit all changes
+		err = tx.Commit(ctx)
+		if err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return errors.New("commit error rolling back transaction: " + err.Error())
+			}
+			return errors.New("error committing refresh token: " + err.Error())
+		}
+		return nil
+	}
+	// Delete without transaction logic with rollback
+	row := s.dbPool.QueryRow(
 		ctx,
 		"INSERT INTO refresh_tokens(user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id",
 		userID,
@@ -185,62 +215,80 @@ func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token stri
 	)
 
 	var refreshTokenId int64
-	err = row.Scan(&refreshTokenId)
+	err := row.Scan(&refreshTokenId)
 	if err != nil {
-		return 0, errors.New("failed to save refresh token: " + err.Error())
+		return errors.New("failed to save refresh token: " + err.Error())
 	}
-	return refreshTokenId, nil
+	return nil
 }
 
 // Get RefreshToken from db
-func (s *Storage) RefreshToken(ctx context.Context, token string) (models.RefreshToken, error) {
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	defer pool.Close()
-	if err != nil {
-		return models.RefreshToken{}, errors.New("failed to connect to database: " + err.Error())
-	}
+func (s *Storage) RefreshToken(ctx context.Context, userToken string) (models.RefreshToken, error) {
+
 	var refreshToken models.RefreshToken
-	row := pool.QueryRow(ctx, "SELECT * FROM refresh_tokens WHERE token = $1", token)
-	err = row.Scan(&refreshToken)
+	row := s.dbPool.QueryRow(ctx, "SELECT * FROM refresh_tokens WHERE token = $1", userToken)
+	err := row.Scan(&refreshToken.ID, &refreshToken.UserID, &refreshToken.Token, &refreshToken.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.RefreshToken{}, errors.New("token not found: " + err.Error())
+			return models.RefreshToken{}, storage.ErrTokenInvalid
 		}
 		return models.RefreshToken{}, err
 	}
-	if refreshToken.ExpiresAt
 	return refreshToken, nil
 }
 
-// RemoveRefreshToken removes token from storage
-func (s *Storage) RemoveRefreshToken(ctx context.Context, token string) (bool, error) {
-	pool, err := pgxpool.New(ctx, getConnString(s.conf))
-	defer pool.Close()
-	if err != nil {
-		return false, errors.New("failed to connect to database")
-	}
-
-	row := pool.QueryRow(
+// RemoveToken removes refresh token from storage
+func (s *Storage) RemoveToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error) {
+	row := s.dbPool.QueryRow(
 		ctx,
 		"SELECT id FROM refresh_tokens WHERE token = $1",
 		token,
 	)
-
 	var oldRefreshTokenId int64
-	err = row.Scan(&oldRefreshTokenId)
+	err := row.Scan(&oldRefreshTokenId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+			return nil, nil
 		}
-		return false, errors.New("failed to find refresh token to remove: " + err.Error())
+		return nil, errors.New("failed to find refresh token to remove: " + err.Error())
 	}
-	var deleteResult bool
-	row = pool.QueryRow(ctx,
-		"DELETE FROM refresh_tokens WHERE id = $1",
-		oldRefreshTokenId)
-	err = row.Scan(&deleteResult)
+	// if needs rollback in next storage calls
+	if isRollback {
+		tx, err := s.dbPool.Begin(ctx)
+		if err != nil {
+			return nil, errors.New("failed to start transaction: " + err.Error())
+		}
+		_, err = tx.Exec(ctx, "DELETE FROM refresh_tokens WHERE id = $1", oldRefreshTokenId)
+		if err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return nil, errors.New("failed to rollback transaction: " + rollbackErr.Error())
+			}
+			return nil, errors.New("failed to delete old refresh token: " + err.Error())
+		}
+		return &tx, nil
+	}
+
+	var deleteIndex int64
+	row = s.dbPool.QueryRow(ctx,
+		"DELETE FROM refresh_tokens WHERE id = $1 RETURNING id", oldRefreshTokenId)
+	err = row.Scan(&deleteIndex)
 	if err != nil {
-		return false, errors.New("failed to delete refresh token: " + err.Error())
+		return nil, errors.New("failed to delete refresh token: " + err.Error())
 	}
-	return deleteResult, nil
+	return nil, nil
+}
+
+// Removes all user tokens in db
+func (s *Storage) RemoveAllUserTokens(ctx context.Context, userID int64) error {
+
+	_, err := s.dbPool.Exec(
+		ctx,
+		"DELETE FROM refresh_tokens WHERE user_id = $1",
+		userID)
+
+	if err != nil {
+		return errors.New("failed to delete refresh tokens of user ID: " + interface{}(userID).(string) + "\n" + err.Error())
+	}
+	return nil
 }

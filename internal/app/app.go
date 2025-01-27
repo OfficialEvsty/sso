@@ -17,6 +17,7 @@ func New(
 	grpcPort int,
 	storagePath string,
 	tokenTTL time.Duration,
+	refreshTTL time.Duration,
 ) *App {
 	// TODO: инициализировать хранилище (storage)
 	storage, err := postgres.New(storagePath)
@@ -28,7 +29,9 @@ func New(
 		storage,
 		storage,
 		storage,
+		storage,
 		tokenTTL,
+		refreshTTL,
 	)
 	// TODO: init auth service (auth)
 	grpcApp := grpcapp.New(log, authService, grpcPort)

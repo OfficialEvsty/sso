@@ -2,12 +2,14 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sso/internal/services/auth"
+	"sso/internal/storage"
 )
 
 type Auth interface {
@@ -26,6 +28,16 @@ type Auth interface {
 		ctx context.Context,
 		userID int64,
 	) (bool, error)
+	UpdateTokens(
+		ctx context.Context,
+		userToken string,
+		userID int64,
+		appID int,
+	) (access string, refresh string, err error)
+	ValidateRefreshToken(
+		ctx context.Context,
+		oldRefreshToken string,
+	) (int64, error)
 }
 
 const (
@@ -104,4 +116,43 @@ func (s *serverAPI) IsAdmin(
 	}
 
 	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
+}
+
+// RefreshToken handler updates user's tokens by receiving refresh token from user
+func (s *serverAPI) RefreshToken(
+	ctx context.Context,
+	req *ssov1.RefreshTokenRequest,
+) (*ssov1.RefreshTokenResponse, error) {
+	userToken := req.GetRefreshToken()
+	appID := req.GetAppId()
+	if userToken == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing refresh token")
+	}
+	userID, err := s.auth.ValidateRefreshToken(ctx, userToken)
+
+	if err != nil {
+		if errors.Is(err, storage.ErrTokenExpired) {
+			return nil, status.Error(codes.PermissionDenied, "refresh token expired")
+		}
+		if errors.Is(err, storage.ErrTokenInvalid) {
+			return nil, status.Error(codes.PermissionDenied, "invalid refresh token")
+		}
+		if errors.Is(err, storage.ErrUserNotFound) {
+			return nil, status.Error(codes.PermissionDenied, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+
+	access, refresh, err := s.auth.UpdateTokens(ctx, userToken, userID, appID)
+	if err != nil {
+		if errors.Is(err, storage.ErrAppNotFound) {
+			return nil, status.Error(codes.InvalidArgument, "app not found")
+		}
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+
+	return &ssov1.RefreshTokenResponse{
+		AccessToken:  access,
+		RefreshToken: refresh,
+	}, nil
 }
