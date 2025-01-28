@@ -13,11 +13,20 @@ type Config struct {
 	TokenTTL        time.Duration `yaml:"token_ttl" env-required:"true"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
 	GRPC            GRPCConfig    `yaml:"grpc" env-required:"true"`
+	Redis           RedisConfig   `yaml:"redis" env-required:"true"`
 }
 
 type GRPCConfig struct {
 	Port    int           `yaml:"port"`
 	Timeout time.Duration `yaml:"timeout"`
+}
+
+type RedisConfig struct {
+	Host       string        `yaml:"host"`
+	Port       int           `yaml:"port"`
+	Password   string        `yaml:"password"`
+	DB         int           `yaml:"db"`
+	SessionTTL time.Duration `yaml:"session_ttl" env-required:"true"`
 }
 
 func MustLoad() *Config {

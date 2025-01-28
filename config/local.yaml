@@ -5,3 +5,9 @@ refresh_token_ttl: 24h
 grpc:
   port: 44043
   timeout: 1h
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  session_ttl: 15m

@@ -16,6 +16,7 @@ type SessionStorage interface {
 	SaveSession(
 		ctx context.Context,
 		ip string,
+		userID int64,
 		device string,
 		expiresAt int64,
 	) (sessionID int64, err error)
@@ -27,4 +28,15 @@ type SessionProvider interface {
 		ctx context.Context,
 		userID int64,
 	) (session []*Session, err error)
+}
+
+func (s *Session) SaveUserSession(
+	ctx context.Context,
+	ip string,
+	userID int64,
+	device string,
+	expiresAt int64,
+) (sessionID int64, err error) {
+	const op = "session.SaveUserSession"
+
 }
