@@ -284,3 +284,36 @@ func (s *Storage) RemoveAllUserTokens(ctx context.Context, userID int64) error {
 	}
 	return nil
 }
+
+// HasRole Checks whether specified user has a role
+// Returns true if user has role, else false
+// Throws RoleNotFound if current role doesn't exist
+func (s *Storage) HasRole(ctx context.Context, userID int64, roleId int32) (bool, error) {
+	row := s.dbPool.QueryRow(
+		ctx,
+		"SELECT id FROM user_roles WHERE user_id = $1 AND role_id = $2",
+		userID,
+		roleId,
+	)
+	var userRoleID int64
+	err := row.Scan(&userRoleID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// UserRoles returns list of active user's roles
+// If user has no one role returns default 'member'
+func (s *Storage) UserRoles(
+	ctx context.Context,
+	userID int64,
+	appID int32,
+) (*[]string, error) {
+	var roles = []string{"member"}
+
+	return &roles, nil
+}

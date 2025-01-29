@@ -29,6 +29,7 @@ func GenerateTokenPair(
 // NewAccessToken Creates auth-token for specified user and app with limited token's duration
 //
 // Returns ttl access token in string format
+// TODO add a role claims to access token
 func NewAccessToken(user models.User, app models.App, duration time.Duration) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 

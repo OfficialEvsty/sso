@@ -10,5 +10,6 @@ var (
 	ErrTokenInvalid   = errors.New("token is invalid")
 	ErrTokenExpired   = errors.New("token is expired")
 	ErrKeyNotFound    = errors.New("redis key not found")
+	ErrRoleNotFound   = errors.New("role not found")
 	InfoCacheDisabled = errors.New("info cache is disabled")
 )
