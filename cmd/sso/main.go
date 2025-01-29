@@ -29,7 +29,10 @@ func main() {
 	application := app.New(
 		log,
 		cfg.GRPC.Port,
+		cfg.Redis,
 		cfg.StoragePath,
+		cfg.SessionEnabled,
+		cfg.UseCache,
 		cfg.TokenTTL,
 		cfg.RefreshTokenTTL,
 	)

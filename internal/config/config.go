@@ -12,6 +12,8 @@ type Config struct {
 	StoragePath     string        `yaml:"conn_string" env-required:"true"`
 	TokenTTL        time.Duration `yaml:"token_ttl" env-required:"true"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
+	SessionEnabled  bool          `yaml:"session_enabled" env-default:"false"`
+	UseCache        bool          `yaml:"use_cache" env-default:"true"`
 	GRPC            GRPCConfig    `yaml:"grpc" env-required:"true"`
 	Redis           RedisConfig   `yaml:"redis" env-required:"true"`
 }

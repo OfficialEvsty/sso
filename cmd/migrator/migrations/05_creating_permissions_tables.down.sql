@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS app_roles;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS roles;

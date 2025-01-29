@@ -9,18 +9,20 @@ import (
 	"log/slog"
 	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
+	"sso/internal/services/session"
 	"sso/internal/storage"
 	"time"
 )
 
 type Auth struct {
-	log           *slog.Logger
-	usrStorage    UserStorage
-	usrProvider   UserProvider
-	appProvider   AppProvider
-	tokenProvider TokenProvider
-	tokenTTL      time.Duration
-	refreshTTL    time.Duration
+	log            *slog.Logger
+	usrStorage     UserStorage
+	usrProvider    UserProvider
+	appProvider    AppProvider
+	tokenProvider  TokenProvider
+	sessionStorage session.SessionStorage
+	tokenTTL       time.Duration
+	refreshTTL     time.Duration
 }
 
 type UserStorage interface {
@@ -60,17 +62,19 @@ func New(
 	userProvider UserProvider,
 	appProvider AppProvider,
 	tokenProvider TokenProvider,
+	sessionStorage session.SessionStorage,
 	tokenTTL time.Duration,
 	refreshTokenTTL time.Duration,
 ) *Auth {
 	return &Auth{
-		usrStorage:    userStorage,
-		usrProvider:   userProvider,
-		appProvider:   appProvider,
-		tokenProvider: tokenProvider,
-		log:           log,
-		tokenTTL:      tokenTTL,
-		refreshTTL:    refreshTokenTTL,
+		usrStorage:     userStorage,
+		usrProvider:    userProvider,
+		appProvider:    appProvider,
+		tokenProvider:  tokenProvider,
+		sessionStorage: sessionStorage,
+		log:            log,
+		tokenTTL:       tokenTTL,
+		refreshTTL:     refreshTokenTTL,
 	}
 }
 
@@ -138,6 +142,15 @@ func (a *Auth) Login(
 	if err != nil {
 		a.log.Error("failed to save token", err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	// not strict if error pass
+	_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+	if err != nil {
+		if !(errors.Is(err, storage.InfoCacheDisabled)) {
+			a.log.Error("failed to save session", err.Error())
+		}
+		a.log.Warn("session was not saved, cache disabled", err.Error())
 	}
 
 	return access, refresh, nil
@@ -274,5 +287,12 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 		a.log.Error("failed to save refresh token", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
+
+	_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+	if err != nil {
+		a.log.Error("failed to save session", err.Error())
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
 	return access, refresh, nil
 }

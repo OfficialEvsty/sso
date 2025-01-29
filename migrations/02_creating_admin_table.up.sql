@@ -1,4 +1,0 @@
-CREATE TABLE IF NOT EXISTS admins(
-id SERIAL PRIMARY KEY,
-user_id INTEGER,
-FOREIGN KEY (user_id) REFERENCES users(id));

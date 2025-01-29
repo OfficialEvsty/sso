@@ -8,8 +8,8 @@ import (
 	_ "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"os"
 	"sso/internal/domain/models"
+	"sso/internal/lib/extensions"
 	"sso/internal/storage"
 	"time"
 )
@@ -24,24 +24,16 @@ type config struct {
 	Path     string
 }
 
-// Simple helper function to read an environment or return a default value
-func getEnv(key string, defaultVal string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultVal
-}
-
 // Init initialize config instance
 func (c *config) Init(storagePath string) {
 	/*if storagePath != "" {
 		c.Path = storagePath
 	}*/
-	c.Host = getEnv("DB_HOST", "localhost")
-	c.Port = getEnv("DB_PORT", "5432")
-	c.Username = getEnv("DB_USER", "postgres")
-	c.Password = getEnv("DB_PASS", "postgres")
-	c.Database = getEnv("DB_NAME", "sso_db")
+	c.Host = extensions.GetEnv("DB_HOST", "localhost")
+	c.Port = extensions.GetEnv("DB_PORT", "5432")
+	c.Username = extensions.GetEnv("DB_USER", "postgres")
+	c.Password = extensions.GetEnv("DB_PASS", "postgres")
+	c.Database = extensions.GetEnv("DB_NAME", "sso_db")
 }
 
 // Storage instance for processing sql queries

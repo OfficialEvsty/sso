@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/OfficialEvsty/protos v0.1.0
+	github.com/OfficialEvsty/protos v0.2.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang-migrate/migrate/v4 v4.18.1

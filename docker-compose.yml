@@ -1,5 +1,15 @@
 # Build and configuration of database image and app Dockerfile in containers
 services:
+  redis:
+    image: redis:latest
+    container_name: redis_container
+    env_file: ".env"
+    environment:
+      REDIS_PASSWORD: $REDIS_PASSWORD
+    networks:
+      - sso-network
+    ports:
+      - $EXTERNAL_REDIS_PORT:$REDIS_PORT
   postgres:
     image: postgres:latest
     container_name: postgres_container
@@ -59,6 +69,9 @@ services:
       DB_HOST: $DB_HOST
       DB_PORT: $DB_PORT
       DB_NAME: $DB_NAME
+      REDIS_PORT: $REDIS_PORT
+      REDIS_HOST: $REDIS_HOST
+      REDIS_PASSWORD: $REDIS_PASSWORD
     ports:
       - $SSO_PORT:$SSO_PORT
     networks:

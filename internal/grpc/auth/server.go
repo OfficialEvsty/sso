@@ -9,10 +9,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"sso/internal/services/auth"
+	"sso/internal/services/session"
 	"sso/internal/storage"
 )
 
-type Auth interface {
+/*type Auth interface {
 	Login(
 		ctx context.Context,
 		email string,
@@ -38,7 +39,7 @@ type Auth interface {
 		ctx context.Context,
 		oldRefreshToken string,
 	) (int64, error)
-}
+}*/
 
 const (
 	emptyValue = 0
@@ -47,6 +48,7 @@ const (
 type serverAPI struct {
 	ssov1.UnimplementedAuthServiceServer
 	auth auth.Auth
+	s    session.Session
 }
 
 func Register(gRPC *grpc.Server, auth *auth.Auth) {
