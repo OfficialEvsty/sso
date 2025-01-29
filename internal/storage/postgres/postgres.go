@@ -314,6 +314,25 @@ func (s *Storage) UserRoles(
 	appID int32,
 ) (*[]string, error) {
 	var roles = []string{"member"}
+	sql := "WITH RolesJoinUserRoles AS (" +
+		"SELECT id, name FROM roles AS r" +
+		"INNER JOIN user_roles AS ur ON ur.role_id = r.id" +
+		"WHERE ur.user_id = $1)" +
+		"SELECT name FROM RolesJoinUserRoles AS rur" +
+		"LEFT JOIN app_roles AS ar ON ar.role_id = rur.id" +
+		"UNION" +
+		"SELECT name FROM RolesJoinUserRoles AS rur" +
+		"INNER JOIN app_roles AS ar ON ar.role_id = rur.id" +
+		"WHERE app_roles = $2;"
 
+	rows, err := s.dbPool.Query(
+		ctx,
+		sql,
+		userID,
+		appID,
+	)
+	if err != nil {
+
+	}
 	return &roles, nil
 }
