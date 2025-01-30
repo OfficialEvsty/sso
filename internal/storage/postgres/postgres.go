@@ -169,21 +169,24 @@ func (s *Storage) App(ctx context.Context, appID int32) (models.App, error) {
 }
 
 // SaveToken saves refresh token to storage
-func (s *Storage) SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error {
+func (s *Storage) SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) (int64, error) {
+	var tokenID int64
 	if tx != nil {
-		_, err := tx.Exec(ctx,
-			"INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
+		row := tx.QueryRow(ctx,
+			"INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3) RETURNING id",
 			userID,
 			token,
 			expiresAt,
 		)
 
+		err := row.Scan(&tokenID)
+
 		if err != nil {
 			rollbackErr := tx.Rollback(ctx)
 			if rollbackErr != nil {
-				return errors.New("error rolling back transaction: " + err.Error())
+				return 0, errors.New("error rolling back transaction: " + err.Error())
 			}
-			return errors.New("error inserting refresh token's data: " + err.Error())
+			return 0, errors.New("error inserting refresh token's data: " + err.Error())
 		}
 
 		// Commit all changes
@@ -191,11 +194,11 @@ func (s *Storage) SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token 
 		if err != nil {
 			rollbackErr := tx.Rollback(ctx)
 			if rollbackErr != nil {
-				return errors.New("commit error rolling back transaction: " + err.Error())
+				return 0, errors.New("commit error rolling back transaction: " + err.Error())
 			}
-			return errors.New("error committing refresh token: " + err.Error())
+			return 0, errors.New("error committing refresh token: " + err.Error())
 		}
-		return nil
+		return tokenID, nil
 	}
 	// Delete without transaction logic with rollback
 	row := s.dbPool.QueryRow(
@@ -209,24 +212,24 @@ func (s *Storage) SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token 
 	var refreshTokenId int64
 	err := row.Scan(&refreshTokenId)
 	if err != nil {
-		return errors.New("failed to save refresh token: " + err.Error())
+		return 0, errors.New("failed to save refresh token: " + err.Error())
 	}
-	return nil
+	return refreshTokenId, nil
 }
 
 // Get RefreshToken from db
-func (s *Storage) RefreshToken(ctx context.Context, userToken string) (models.RefreshToken, error) {
+func (s *Storage) RefreshToken(ctx context.Context, userToken string) (*models.RefreshToken, error) {
 
 	var refreshToken models.RefreshToken
 	row := s.dbPool.QueryRow(ctx, "SELECT * FROM refresh_tokens WHERE token = $1", userToken)
 	err := row.Scan(&refreshToken.ID, &refreshToken.UserID, &refreshToken.Token, &refreshToken.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return models.RefreshToken{}, storage.ErrTokenInvalid
+			return &models.RefreshToken{}, storage.ErrTokenInvalid
 		}
-		return models.RefreshToken{}, err
+		return &models.RefreshToken{}, err
 	}
-	return refreshToken, nil
+	return &refreshToken, nil
 }
 
 // RemoveToken removes refresh token from storage
@@ -291,12 +294,26 @@ func (s *Storage) RemoveAllUserTokens(ctx context.Context, userID int64) error {
 func (s *Storage) HasRole(ctx context.Context, userID int64, roleId int32) (bool, error) {
 	row := s.dbPool.QueryRow(
 		ctx,
+		"SELECT id FROM roles WHERE id = $1",
+		roleId,
+	)
+	var checkRoleID int32
+	err := row.Scan(&checkRoleID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, storage.ErrRoleNotFound
+		}
+		return false, err
+	}
+
+	row = s.dbPool.QueryRow(
+		ctx,
 		"SELECT id FROM user_roles WHERE user_id = $1 AND role_id = $2",
 		userID,
 		roleId,
 	)
 	var userRoleID int64
-	err := row.Scan(&userRoleID)
+	err = row.Scan(&userRoleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
@@ -314,16 +331,21 @@ func (s *Storage) UserRoles(
 	appID int32,
 ) (*[]string, error) {
 	var roles = []string{"member"}
-	sql := "WITH RolesJoinUserRoles AS (" +
-		"SELECT id, name FROM roles AS r" +
-		"INNER JOIN user_roles AS ur ON ur.role_id = r.id" +
-		"WHERE ur.user_id = $1)" +
-		"SELECT name FROM RolesJoinUserRoles AS rur" +
-		"LEFT JOIN app_roles AS ar ON ar.role_id = rur.id" +
-		"UNION" +
-		"SELECT name FROM RolesJoinUserRoles AS rur" +
-		"INNER JOIN app_roles AS ar ON ar.role_id = rur.id" +
-		"WHERE app_roles = $2;"
+	// Finds intersection of left join and inner join with condition
+	/*sql := "WITH RolesJoinUserRoles AS (" +
+	"SELECT r.id, r.name FROM roles AS r " +
+	"INNER JOIN user_roles AS ur ON ur.role_id = r.id " +
+	"WHERE ur.user_id = $1) " +
+	"SELECT name FROM RolesJoinUserRoles AS rur " +
+	"LEFT JOIN app_roles AS ar ON ar.role_id = rur.id " +
+	"UNION " +
+	"SELECT name FROM RolesJoinUserRoles AS rur " +
+	"INNER JOIN app_roles AS ar ON ar.role_id = rur.id " +
+	"WHERE ar.app_id = $2;"*/
+	sql := "SELECT name FROM roles AS r " +
+		"JOIN user_roles AS ur on r.id = ur.role_id " +
+		"LEFT JOIN app_roles AS ar ON r.id = ar.role_id " +
+		"WHERE ur.user_id = $1 AND ar.app_id = $2 OR ar.app_id IS NULL;"
 
 	rows, err := s.dbPool.Query(
 		ctx,
@@ -331,8 +353,38 @@ func (s *Storage) UserRoles(
 		userID,
 		appID,
 	)
+	defer rows.Close()
 	if err != nil {
-
+		return nil, err
+	}
+	var roleName string
+	for rows.Next() {
+		err = rows.Scan(&roleName)
+		if err != nil {
+			return nil, err
+		}
+		roles = append(roles, roleName)
 	}
 	return &roles, nil
+}
+
+// AssignRole adds role to specified user
+func (s *Storage) AssignRole(ctx context.Context, userID int64, roleID int32) (bool, error) {
+	row := s.dbPool.QueryRow(
+		ctx,
+		"INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+		userID,
+		roleID,
+	)
+	var userRoleID int64
+	err := row.Scan(&userRoleID)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// RevokeRole revokes role from specified user
+func (s *Storage) RevokeRole(ctx context.Context, userID int64, roleId int32) (bool, error) {
+	return true, nil
 }

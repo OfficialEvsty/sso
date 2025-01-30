@@ -4,8 +4,10 @@ import (
 	"log/slog"
 	grpcapp "sso/internal/app/grpc"
 	"sso/internal/config"
+	"sso/internal/services/access"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
+	"sso/internal/storage/cached_postgres"
 	"sso/internal/storage/postgres"
 	"sso/internal/storage/redis"
 	"time"
@@ -28,6 +30,7 @@ func New(
 	// TODO: инициализировать хранилище (storage)
 	storage, err := postgres.New(storagePath)
 	cache, err := redis.NewCache(&redisConfig, useCache)
+	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
 	if err != nil {
 		panic(err)
 	}
@@ -37,7 +40,9 @@ func New(
 		storage,
 		storage,
 		storage,
+		cashedStorage,
 		cache,
+		storage,
 		tokenTTL,
 		refreshTTL,
 	)
@@ -47,8 +52,14 @@ func New(
 		cache,
 		sessionEnabled,
 	)
+
+	accessService := access.New(
+		log,
+		storage,
+		storage,
+	)
 	// TODO: init auth service (auth)
-	grpcApp := grpcapp.New(log, authService, sessionService, grpcPort)
+	grpcApp := grpcapp.New(log, authService, sessionService, accessService, grpcPort)
 
 	return &App{
 		GRPCSrv: grpcApp,

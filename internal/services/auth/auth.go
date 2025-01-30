@@ -7,8 +7,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
-	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
+	"sso/internal/services/access"
+	"sso/internal/services/auth/interfaces"
 	"sso/internal/services/session"
 	"sso/internal/storage"
 	"time"
@@ -16,39 +17,15 @@ import (
 
 type Auth struct {
 	log            *slog.Logger
-	usrStorage     UserStorage
-	usrProvider    UserProvider
-	appProvider    AppProvider
-	tokenProvider  TokenProvider
+	usrStorage     interfaces.UserStorage
+	usrProvider    interfaces.UserProvider
+	appProvider    interfaces.AppProvider
+	tokenCleaner   interfaces.TokenCleaner
+	tokenProvider  interfaces.TokenProvider
+	roleProvider   access.RoleProvider
 	sessionStorage session.SessionStorage
 	tokenTTL       time.Duration
 	refreshTTL     time.Duration
-}
-
-type UserStorage interface {
-	SaveUser(
-		ctx context.Context,
-		email string,
-		passHash []byte,
-	) (uid int64, err error)
-}
-
-type UserProvider interface {
-	UserById(ctx context.Context, id int64) (models.User, error)
-	User(ctx context.Context, email string) (user models.User, err error)
-	IsAdmin(ctx context.Context, uid int64) (isAdmin bool, err error)
-}
-
-type AppProvider interface {
-	App(ctx context.Context, appId int32) (app models.App, err error)
-}
-
-// TokenProvider interface for save/get/delete refresh tokens
-type TokenProvider interface {
-	RefreshToken(ctx context.Context, token string) (refreshToken models.RefreshToken, err error)
-	RemoveToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error)
-	RemoveAllUserTokens(ctx context.Context, userID int64) error
-	SaveToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error
 }
 
 var (
@@ -58,11 +35,13 @@ var (
 // New returns a new instance of the Auth service
 func New(
 	log *slog.Logger,
-	userStorage UserStorage,
-	userProvider UserProvider,
-	appProvider AppProvider,
-	tokenProvider TokenProvider,
+	userStorage interfaces.UserStorage,
+	userProvider interfaces.UserProvider,
+	appProvider interfaces.AppProvider,
+	tokenCleaner interfaces.TokenCleaner,
+	tokenProvider interfaces.TokenProvider,
 	sessionStorage session.SessionStorage,
+	roleProvider access.RoleProvider,
 	tokenTTL time.Duration,
 	refreshTokenTTL time.Duration,
 ) *Auth {
@@ -70,8 +49,10 @@ func New(
 		usrStorage:     userStorage,
 		usrProvider:    userProvider,
 		appProvider:    appProvider,
+		tokenCleaner:   tokenCleaner,
 		tokenProvider:  tokenProvider,
 		sessionStorage: sessionStorage,
+		roleProvider:   roleProvider,
 		log:            log,
 		tokenTTL:       tokenTTL,
 		refreshTTL:     refreshTokenTTL,
@@ -125,20 +106,26 @@ func (a *Auth) Login(
 
 	log.Info("user logged in successfully")
 
-	refresh, access, err = jwt.GenerateTokenPair(user, app, a.tokenTTL)
+	// Getting current user's roles
+	roles, err := a.roleProvider.UserRoles(ctx, user.ID, appID)
+	if err != nil {
+		a.log.Error("error getting user roles, default role was returned", op, err.Error())
+		roles = &[]string{"member"}
+	}
+	refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
 
 	if err != nil {
 		a.log.Error("failed to generate tokens", err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	err = a.tokenProvider.RemoveAllUserTokens(ctx, user.ID)
+	err = a.tokenCleaner.RemoveAllUserTokens(ctx, user.ID)
 	if err != nil {
 		a.log.Error("failed to remove user tokens", err.Error())
 	}
 
 	timeToExpire := time.Now().Add(a.refreshTTL)
-	err = a.tokenProvider.SaveToken(ctx, nil, user.ID, refresh, timeToExpire)
+	err = a.tokenProvider.CachedSaveRefreshToken(ctx, nil, user.ID, refresh, timeToExpire)
 	if err != nil {
 		a.log.Error("failed to save token", err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
@@ -220,19 +207,19 @@ func (a *Auth) ValidateRefreshToken(ctx context.Context, oldRefreshToken string)
 	const op = "auth.ValidateRefreshToken"
 
 	// get stored refresh token to validate received user's token
-	storedOldRefreshToken, err := a.tokenProvider.RefreshToken(
+	storedOldRefreshToken, err := a.tokenProvider.CachedRefreshToken(
 		ctx,
 		oldRefreshToken,
 	)
 	if err != nil {
 		a.log.Error("failed to get refresh token ", err.Error(), op, oldRefreshToken)
-		return 0, errors.New("failed to get refresh token:" + err.Error())
+		return 0, storage.ErrTokenInvalid
 	}
 
 	// if refresh token expired
 	if storedOldRefreshToken.ExpiresAt.Unix() < time.Now().Unix() {
 		a.log.Info("refresh token expired", op, oldRefreshToken)
-		_, err := a.tokenProvider.RemoveToken(ctx, oldRefreshToken, false)
+		_, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, false)
 		if err != nil {
 			return 0, fmt.Errorf("%s: %w", op, err)
 		}
@@ -269,12 +256,18 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	refresh, access, err = jwt.GenerateTokenPair(user, app, a.tokenTTL)
+	roles, err := a.roleProvider.UserRoles(ctx, user.ID, appID)
+	if err != nil {
+		a.log.Error("error getting user roles", op, err.Error())
+		return "", "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
 	if err != nil {
 		a.log.Error("failed to generate tokens", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
-	tx, err := a.tokenProvider.RemoveToken(ctx, oldRefreshToken, true)
+	tx, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, true)
 
 	if err != nil {
 		a.log.Error("failed to remove old refresh token", op, err.Error())
@@ -282,7 +275,13 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 	}
 
 	timeToExpire := time.Now().Add(a.refreshTTL)
-	err = a.tokenProvider.SaveToken(ctx, *tx, user.ID, refresh, timeToExpire)
+	var txSafe pgx.Tx
+	if tx == nil {
+		txSafe = nil
+	} else {
+		txSafe = *tx
+	}
+	err = a.tokenProvider.CachedSaveRefreshToken(ctx, txSafe, user.ID, refresh, timeToExpire)
 	if err != nil {
 		a.log.Error("failed to save refresh token", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)

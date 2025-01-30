@@ -6,36 +6,18 @@ import (
 	"fmt"
 	"log/slog"
 	"sso/internal/domain/models"
+	"sso/internal/services/session/interfaces"
 	"sso/internal/storage"
 )
 
 type Session struct {
 	log             *slog.Logger
-	sessionStorage  SessionStorage
-	sessionProvider SessionProvider
+	sessionStorage  interfaces.SessionStorage
+	sessionProvider interfaces.SessionProvider
 	Enabled         bool
 }
 
-// SessionStorage for store sessions
-type SessionStorage interface {
-	SaveSession(
-		ctx context.Context,
-		userID int64,
-		appID int32,
-		ip string,
-		device string,
-	) (sessionID string, err error)
-}
-
-// SessionProvider provides operations with session terminate/get session
-type SessionProvider interface {
-	UserSessions(
-		ctx context.Context,
-		userID int64,
-	) (session []models.Session, err error)
-}
-
-func New(log *slog.Logger, sessionStorage SessionStorage, sessionProvider SessionProvider, enabled bool) *Session {
+func New(log *slog.Logger, sessionStorage interfaces.SessionStorage, sessionProvider interfaces.SessionProvider, enabled bool) *Session {
 	return &Session{
 		log:             log,
 		sessionStorage:  sessionStorage,

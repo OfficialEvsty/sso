@@ -42,6 +42,8 @@ func (s *sessionAPI) GetUserSessions(
 	var responseSessions = make([]*ssov1.Session, 0)
 	for _, session_ := range sessions {
 		responseSessions = append(responseSessions, &ssov1.Session{
+			UserId:    session_.UserID,
+			AppId:     session_.AppID,
 			IpAddress: session_.Ip,
 			Device:    session_.Device,
 			CreatedAt: session_.CreatedAt.Unix(),

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/redis/go-redis/v9"
 	"sso/internal/config"
 	"sso/internal/domain/models"
@@ -95,7 +94,6 @@ func (c *Cache) UserSessions(
 	var sessions []models.Session
 	var session models.Session
 	for _, val := range result {
-		fmt.Println(val)
 		err = json.Unmarshal([]byte(val), &session)
 		if err != nil {
 			if errors.Is(err, redis.Nil) {
@@ -106,4 +104,72 @@ func (c *Cache) UserSessions(
 		sessions = append(sessions, session)
 	}
 	return sessions, nil
+}
+
+// SaveRefreshToken saves token in cache
+func (c *Cache) SaveRefreshToken(
+	ctx context.Context,
+	id int64,
+	userID int64,
+	token string,
+	expiresAt time.Time,
+) error {
+	if !c.useCache {
+		return storage.InfoCacheDisabled
+	}
+	tokenKey := "refresh_tokens:" + token
+	tokenData := map[string]interface{}{
+		"id":         id,
+		"user_id":    userID,
+		"token":      token,
+		"expires_at": expiresAt,
+	}
+	err := c.rdb.HSet(ctx, tokenKey, tokenData).Err()
+	if err != nil {
+		return err
+	}
+	err = c.rdb.Expire(ctx, tokenKey, c.sessionTTL).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// допустил глупую ощибку в имя ключа поставил -, а не _ и тупил 30 минут, нормализируйте имена ключей
+// RefreshToken gets token from cache if it
+func (c *Cache) RefreshToken(ctx context.Context, token string) (*models.RefreshToken, error) {
+	if !c.useCache {
+		return nil, storage.InfoCacheDisabled
+	}
+	tokenKey := "refresh_tokens:" + token
+	cachedString, err := c.rdb.HGetAll(ctx, tokenKey).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(cachedString) == 0 {
+		return nil, storage.InfoCacheKeyNotFound
+	}
+	var cashedToken models.RefreshToken
+	jsonData, err := json.Marshal(cachedString)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(jsonData, &cashedToken)
+	if err != nil {
+		return nil, err
+	}
+	return &cashedToken, nil
+}
+
+// DeleteRefreshToken removes token from cache
+func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
+	if !c.useCache {
+		return storage.InfoCacheDisabled
+	}
+	tokenKey := "refresh_tokens:" + token
+	err := c.rdb.Del(ctx, tokenKey).Err()
+	if err != nil {
+		return err
+	}
+	return nil
 }
