@@ -8,9 +8,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"sso/internal/lib/jwt"
-	"sso/internal/services/access"
+	interfaces2 "sso/internal/services/access/interfaces"
 	"sso/internal/services/auth/interfaces"
-	"sso/internal/services/session"
+	interfaces3 "sso/internal/services/session/interfaces"
 	"sso/internal/storage"
 	"time"
 )
@@ -22,8 +22,8 @@ type Auth struct {
 	appProvider    interfaces.AppProvider
 	tokenCleaner   interfaces.TokenCleaner
 	tokenProvider  interfaces.TokenProvider
-	roleProvider   access.RoleProvider
-	sessionStorage session.SessionStorage
+	roleProvider   interfaces2.RoleProvider
+	sessionStorage interfaces3.SessionStorage
 	tokenTTL       time.Duration
 	refreshTTL     time.Duration
 }
@@ -40,8 +40,8 @@ func New(
 	appProvider interfaces.AppProvider,
 	tokenCleaner interfaces.TokenCleaner,
 	tokenProvider interfaces.TokenProvider,
-	sessionStorage session.SessionStorage,
-	roleProvider access.RoleProvider,
+	sessionStorage interfaces3.SessionStorage,
+	roleProvider interfaces2.RoleProvider,
 	tokenTTL time.Duration,
 	refreshTokenTTL time.Duration,
 ) *Auth {

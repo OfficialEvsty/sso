@@ -5,9 +5,17 @@ import (
 	"encoding/base64"
 	"github.com/golang-jwt/jwt/v5"
 	"sso/internal/domain/models"
+	"sso/internal/storage"
 	"strings"
 	"time"
 )
+
+type AccessToken struct {
+	UserID    int64     `json:"user_id"`
+	AppID     int32     `json:"app_id"`
+	Roles     []string  `json:"roles"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
 
 // GenerateTokenPair generates both tokens access and refresh
 func GenerateTokenPair(
@@ -62,4 +70,32 @@ func NewRefreshToken() (string, error) {
 
 	// Encrypting token in base64
 	return base64.URLEncoding.EncodeToString(token), nil
+}
+
+// ValidateAccessToken checks if access token is valid
+func ValidateAccessToken(tokenString string, secret string) (*AccessToken, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return secret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !token.Valid {
+		return nil, storage.ErrTokenInvalid
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); !ok {
+		expiresAtUnix := claims["exp"].(int64)
+		if expiresAtUnix < time.Now().Unix() {
+			return nil, storage.ErrTokenExpired
+		}
+		return &AccessToken{
+			UserID:    claims["uid"].(int64),
+			AppID:     claims["app_id"].(int32),
+			Roles:     strings.Split(claims["roles"].(string), "/"),
+			ExpiresAt: time.Unix(claims["exp"].(int64), 0),
+		}, nil
+
+	}
+	return nil, jwt.ErrTokenInvalidClaims
 }

@@ -30,8 +30,16 @@ func (a *accessServer) AssignGroupRole(ctx context.Context, req *ssov1.AssignGro
 	if roleID <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid role id")
 	}
+	token := req.AccessToken
+	if token == "" {
+		return nil, status.Error(codes.InvalidArgument, "invalid access token")
+	}
+	appID := req.GetAppId()
+	if appID <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid app id")
+	}
 
-	result, err := a.access.AssignRoleToUser(ctx, userID, roleID)
+	result, err := a.access.AssignRoleToUser(ctx, token, userID, roleID, appID)
 	if err != nil {
 		if errors.Is(err, storage.InfoUserAlreadyHasRole) {
 			return nil, status.Error(codes.AlreadyExists, err.Error())
@@ -41,6 +49,15 @@ func (a *accessServer) AssignGroupRole(ctx context.Context, req *ssov1.AssignGro
 		}
 		if errors.Is(err, storage.ErrRoleNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
+		}
+		if errors.Is(err, storage.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+		if errors.Is(err, storage.ErrTokenInvalid) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if errors.Is(err, storage.ErrTokenExpired) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -60,8 +77,16 @@ func (a *accessServer) RevokeGroupRole(ctx context.Context, req *ssov1.RevokeGro
 	if roleID <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid role id")
 	}
+	token := req.AccessToken
+	if token == "" {
+		return nil, status.Error(codes.InvalidArgument, "invalid access token")
+	}
+	appID := req.GetAppId()
+	if appID <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid app id")
+	}
 
-	result, err := a.access.RevokeRoleFromUser(ctx, userID, roleID)
+	result, err := a.access.RevokeRoleFromUser(ctx, token, userID, roleID, appID)
 	if err != nil {
 		if errors.Is(err, storage.InfoUserHasNoSpecifiedRole) {
 			return nil, status.Error(codes.NotFound, err.Error())
@@ -71,6 +96,15 @@ func (a *accessServer) RevokeGroupRole(ctx context.Context, req *ssov1.RevokeGro
 		}
 		if errors.Is(err, storage.ErrRoleNotFound) {
 			return nil, status.Error(codes.NotFound, err.Error())
+		}
+		if errors.Is(err, storage.ErrPermissionDenied) {
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+		if errors.Is(err, storage.ErrTokenInvalid) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
+		}
+		if errors.Is(err, storage.ErrTokenExpired) {
+			return nil, status.Error(codes.FailedPrecondition, err.Error())
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}

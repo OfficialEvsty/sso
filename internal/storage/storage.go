@@ -11,6 +11,7 @@ var (
 	ErrTokenExpired            = errors.New("token is expired")
 	ErrKeyNotFound             = errors.New("redis key not found")
 	ErrRoleNotFound            = errors.New("role not found")
+	ErrPermissionDenied        = errors.New("you has no permissions for this action")
 	InfoCacheDisabled          = errors.New("info cache is disabled")
 	InfoCacheKeyNotFound       = errors.New("cache key not found")
 	InfoUserAlreadyHasRole     = errors.New("user already has role")
