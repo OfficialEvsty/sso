@@ -3,6 +3,7 @@ package jwt
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"sso/internal/domain/models"
 	"sso/internal/storage"
@@ -39,7 +40,6 @@ func GenerateTokenPair(
 // NewAccessToken Creates auth-token for specified user and app with limited token's duration
 //
 // Returns ttl access token in string format
-// TODO add a role claims to access token
 func NewAccessToken(user models.User, app models.App, roles []string, duration time.Duration) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 
@@ -74,9 +74,14 @@ func NewRefreshToken() (string, error) {
 
 // ValidateAccessToken checks if access token is valid
 func ValidateAccessToken(tokenString string, secret string) (*AccessToken, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return secret, nil
-	})
+	token, err := jwt.Parse(tokenString,
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("There was an error in parsing")
+			}
+			return []byte(secret), nil
+		})
+
 	if err != nil {
 		return nil, err
 	}
@@ -84,16 +89,16 @@ func ValidateAccessToken(tokenString string, secret string) (*AccessToken, error
 	if !token.Valid {
 		return nil, storage.ErrTokenInvalid
 	}
-	if claims, ok := token.Claims.(jwt.MapClaims); !ok {
-		expiresAtUnix := claims["exp"].(int64)
-		if expiresAtUnix < time.Now().Unix() {
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		expiresAtUnix := int64(claims["exp"].(float64))
+		if expiresAtUnix < (time.Now().Unix()) {
 			return nil, storage.ErrTokenExpired
 		}
 		return &AccessToken{
-			UserID:    claims["uid"].(int64),
-			AppID:     claims["app_id"].(int32),
+			UserID:    int64(claims["uid"].(float64)),
+			AppID:     int32(claims["app_id"].(float64)),
 			Roles:     strings.Split(claims["roles"].(string), "/"),
-			ExpiresAt: time.Unix(claims["exp"].(int64), 0),
+			ExpiresAt: time.Unix(int64(claims["exp"].(float64)), 0),
 		}, nil
 
 	}

@@ -27,7 +27,6 @@ func New(
 	tokenTTL time.Duration,
 	refreshTTL time.Duration,
 ) *App {
-	// TODO: инициализировать хранилище (storage)
 	storage, err := postgres.New(storagePath)
 	cache, err := redis.NewCache(&redisConfig, useCache)
 	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
@@ -58,8 +57,8 @@ func New(
 		storage,
 		storage,
 		storage,
+		storage,
 	)
-	// TODO: init auth service (auth)
 	grpcApp := grpcapp.New(log, authService, sessionService, accessService, grpcPort)
 
 	return &App{

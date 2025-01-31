@@ -75,7 +75,6 @@ func (s *serverAPI) Login(
 		fmt.Print(err.Error())
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
-	// TODO: implement login via auth service
 
 	return &ssov1.LoginResponse{
 		AccessToken:  access,
@@ -97,7 +96,6 @@ func (s *serverAPI) Register(
 
 	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
-		// TODO: ERROR
 		return nil, status.Error(codes.Internal, "permission denied")
 	}
 	return &ssov1.RegisterResponse{UserId: userID}, nil
@@ -156,5 +154,28 @@ func (s *serverAPI) RefreshToken(
 	return &ssov1.RefreshTokenResponse{
 		AccessToken:  access,
 		RefreshToken: refresh,
+	}, nil
+}
+
+// LogoutAll endpoint cleans all cached and stored in db tokens
+func (s *serverAPI) LogoutAll(
+	ctx context.Context,
+	req *ssov1.LogoutAllRequest,
+) (*ssov1.LogoutAllResponse, error) {
+	userID := req.GetUserId()
+	if userID <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid user id")
+	}
+	token := req.GetToken()
+
+	err := s.auth.CompleteLogout(ctx, userID, token)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			return nil, status.Error(codes.InvalidArgument, "user not found")
+		}
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+	return &ssov1.LogoutAllResponse{
+		Message: "user successfully logged out",
 	}, nil
 }

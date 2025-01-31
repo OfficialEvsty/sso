@@ -295,3 +295,31 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 
 	return access, refresh, nil
 }
+
+// CompleteLogout logout user and cleans held cache and tokens stored in database
+func (a *Auth) CompleteLogout(ctx context.Context, userID int64, token string) error {
+	const op = "auth.CompleteLogout"
+
+	_, err := a.usrProvider.UserById(ctx, userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserNotFound) {
+			a.log.Error("user not found", op, userID, err.Error())
+			return storage.ErrUserNotFound
+		}
+		a.log.Error("failed to get user", op, userID, err.Error())
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	_, err = a.tokenProvider.CachedDeleteRefreshToken(ctx, token, false)
+	if err != nil {
+		a.log.Error("failed to remove refresh token", op, userID, err.Error())
+	}
+
+	err = a.tokenCleaner.RemoveAllUserTokens(ctx, userID)
+	if err != nil {
+		a.log.Error("failed to remove user tokens", op, userID, err.Error())
+	}
+
+	a.log.Info("successfully logged out", op, userID)
+	return nil
+}

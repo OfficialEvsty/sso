@@ -3,6 +3,7 @@ package access
 import (
 	"context"
 	"errors"
+	"fmt"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -35,6 +36,7 @@ func (a *accessServer) AssignGroupRole(ctx context.Context, req *ssov1.AssignGro
 		return nil, status.Error(codes.InvalidArgument, "invalid access token")
 	}
 	appID := req.GetAppId()
+	fmt.Println(appID)
 	if appID <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid app id")
 	}

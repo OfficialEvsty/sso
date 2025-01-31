@@ -89,7 +89,7 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 		var pgxError *pgconn.PgError
 		if errors.As(err, &pgxError) {
 			if pgxError.Code == "23505" {
-				return 0, err
+				return 0, storage.ErrUserExists
 			}
 		}
 		return 0, err
@@ -135,13 +135,14 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 }
 
 // IsAdmin checks whether this user an admin
-func (s *Storage) IsAdmin(ctx context.Context, userID int64) (isAdmin bool, err error) {
+func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	const op = "storage.postgres.IsAdmin"
 
 	row := s.dbPool.QueryRow(ctx,
-		"SELECT * FROM admins WHERE user_id = $1",
+		"SELECT id FROM admins WHERE user_id = $1",
 		userID)
-	err = row.Scan(&isAdmin)
+	var id int64
+	err := row.Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return false, nil
@@ -345,7 +346,7 @@ func (s *Storage) UserRoles(
 	sql := "SELECT name FROM roles AS r " +
 		"JOIN user_roles AS ur on r.id = ur.role_id " +
 		"LEFT JOIN app_roles AS ar ON r.id = ar.role_id " +
-		"WHERE ur.user_id = $1 AND ar.app_id = $2 OR ar.app_id IS NULL;"
+		"WHERE ur.user_id = $1 AND (ar.app_id = $2 OR ar.app_id IS NULL);"
 
 	rows, err := s.dbPool.Query(
 		ctx,
@@ -372,7 +373,7 @@ func (s *Storage) UserRoles(
 func (s *Storage) AssignRole(ctx context.Context, userID int64, roleID int32) (bool, error) {
 	row := s.dbPool.QueryRow(
 		ctx,
-		"INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+		"INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) RETURNING id",
 		userID,
 		roleID,
 	)
@@ -386,5 +387,16 @@ func (s *Storage) AssignRole(ctx context.Context, userID int64, roleID int32) (b
 
 // RevokeRole revokes role from specified user
 func (s *Storage) RevokeRole(ctx context.Context, userID int64, roleId int32) (bool, error) {
+	row := s.dbPool.QueryRow(
+		ctx,
+		"DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2 RETURNING id",
+		userID,
+		roleId,
+	)
+	var userRoleID int64
+	err := row.Scan(&userRoleID)
+	if err != nil {
+		return false, err
+	}
 	return true, nil
 }
