@@ -3,7 +3,6 @@ package cached_postgres
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/jackc/pgx/v5"
 	"sso/internal/domain/models"
 	"sso/internal/storage"
@@ -30,7 +29,7 @@ func (cs *CachedStorage) CachedRefreshToken(ctx context.Context, token string) (
 	// cache(redis)
 	refreshToken, err := cs.c.RefreshToken(ctx, token)
 	if err != nil {
-		if !errors.Is(err, storage.InfoCacheKeyNotFound) || errors.Is(err, storage.InfoCacheDisabled) {
+		if !(errors.Is(err, storage.InfoCacheKeyNotFound) || errors.Is(err, storage.InfoCacheDisabled)) {
 			return nil, err
 		}
 	}
@@ -76,7 +75,7 @@ func (cs *CachedStorage) CachedSaveRefreshToken(
 		expiresAt,
 	)
 	if err != nil {
-		fmt.Println("error save token in cache: " + err.Error())
+		return storage.InfoCacheDisabled
 	}
 	return nil
 }
@@ -85,7 +84,9 @@ func (cs *CachedStorage) CachedSaveRefreshToken(
 func (cs *CachedStorage) CachedDeleteRefreshToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error) {
 	err := cs.c.DeleteRefreshToken(ctx, token)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, storage.InfoCacheKeyNotFound) {
+			return nil, err
+		}
 	}
 	tx, err := cs.s.RemoveToken(ctx, token, isRollback)
 	if err != nil {

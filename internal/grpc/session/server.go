@@ -37,6 +37,12 @@ func (s *sessionAPI) GetUserSessions(
 		if errors.Is(err, storage.ErrKeyNotFound) {
 			return nil, status.Error(codes.NotFound, "sessions not found")
 		}
+		if errors.Is(err, storage.InfoCacheDisabled) {
+			return nil, status.Error(codes.Unavailable, "cache is disabled")
+		}
+		if errors.Is(err, storage.InfoSessionsDisabled) {
+			return nil, status.Error(codes.Unavailable, "sessions is disabled")
+		}
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
 	var responseSessions = make([]*ssov1.Session, 0)

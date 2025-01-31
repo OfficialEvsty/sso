@@ -25,4 +25,4 @@ LABEL version="v0.5.2" author="OfficialEvsty" desc="Auth service"
 # ENV
 
 ENTRYPOINT ["/sso/main"]
-CMD ["--config", "/sso/config/local.yaml"]
+CMD ["--config", "./config/local.yaml"]

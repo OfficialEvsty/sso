@@ -16,4 +16,5 @@ var (
 	InfoCacheKeyNotFound       = errors.New("cache key not found")
 	InfoUserAlreadyHasRole     = errors.New("user already has role")
 	InfoUserHasNoSpecifiedRole = errors.New("user has no specified role")
+	InfoSessionsDisabled       = errors.New("sessions is disabled")
 )

@@ -127,8 +127,10 @@ func (a *Auth) Login(
 	timeToExpire := time.Now().Add(a.refreshTTL)
 	err = a.tokenProvider.CachedSaveRefreshToken(ctx, nil, user.ID, refresh, timeToExpire)
 	if err != nil {
-		a.log.Error("failed to save token", err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		if !errors.Is(err, storage.InfoCacheDisabled) {
+			a.log.Error("failed to save token", err.Error())
+			return "", "", fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	// not strict if error pass
@@ -270,8 +272,10 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 	tx, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, true)
 
 	if err != nil {
-		a.log.Error("failed to remove old refresh token", op, err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		if !errors.Is(err, storage.InfoCacheDisabled) {
+			a.log.Error("failed to remove old refresh token", op, err.Error())
+			return "", "", fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	timeToExpire := time.Now().Add(a.refreshTTL)
@@ -283,14 +287,18 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 	}
 	err = a.tokenProvider.CachedSaveRefreshToken(ctx, txSafe, user.ID, refresh, timeToExpire)
 	if err != nil {
-		a.log.Error("failed to save refresh token", op, err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		if !errors.Is(err, storage.InfoCacheDisabled) {
+			a.log.Error("failed to save refresh token", op, err.Error())
+			return "", "", fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
 	if err != nil {
-		a.log.Error("failed to save session", err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		if !(errors.Is(err, storage.InfoCacheDisabled) || errors.Is(err, storage.InfoSessionsDisabled)) {
+			a.log.Error("failed to save session", err.Error())
+			return "", "", fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	return access, refresh, nil
