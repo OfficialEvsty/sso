@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"sso/internal/lib/jwt"
@@ -168,6 +167,14 @@ func (a *Auth) RegisterNewUser(
 		log.Error("failed to generate password's hash", err.Error())
 
 		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	_, err = a.usrProvider.User(ctx, email)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			log.Error("failed to get user", err.Error())
+			return 0, fmt.Errorf("%s: %w", op, err)
+		}
 	}
 
 	id, err := a.usrStorage.SaveUser(ctx, email, passHash)
