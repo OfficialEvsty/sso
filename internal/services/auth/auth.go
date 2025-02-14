@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"sso/internal/lib/jwt"
@@ -175,6 +176,9 @@ func (a *Auth) RegisterNewUser(
 			log.Error("failed to get user", err.Error())
 			return 0, fmt.Errorf("%s: %w", op, err)
 		}
+	} else {
+		log.Info("user already registered")
+		return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
 	}
 
 	id, err := a.usrStorage.SaveUser(ctx, email, passHash)

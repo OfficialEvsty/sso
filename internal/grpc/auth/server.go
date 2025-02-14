@@ -72,7 +72,6 @@ func (s *serverAPI) Login(
 	}
 	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
-		fmt.Print(err.Error())
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
 
@@ -96,6 +95,11 @@ func (s *serverAPI) Register(
 
 	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
+		if errors.Is(err, storage.ErrUserExists) {
+			fmt.Print(err.Error())
+			return nil, status.Error(codes.FailedPrecondition, "user exists")
+		}
+		fmt.Print(err.Error())
 		return nil, status.Error(codes.Internal, "permission denied")
 	}
 	return &ssov1.RegisterResponse{UserId: userID}, nil
