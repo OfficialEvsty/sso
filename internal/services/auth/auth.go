@@ -172,7 +172,7 @@ func (a *Auth) RegisterNewUser(
 
 	_, err = a.usrProvider.User(ctx, email)
 	if err != nil {
-		if !errors.Is(err, pgx.ErrNoRows) {
+		if !errors.Is(err, storage.ErrUserNotExist) {
 			log.Error("failed to get user", err.Error())
 			return 0, fmt.Errorf("%s: %w", op, err)
 		}
