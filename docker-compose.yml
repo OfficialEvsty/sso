@@ -9,7 +9,7 @@ services:
     networks:
       - sso-network
     ports:
-      - $EXTERNAL_REDIS_PORT:$REDIS_PORT
+      - ${EXTERNAL_REDIS_PORT}:${REDIS_PORT}
   postgres:
     image: postgres:latest
     container_name: postgres_container
@@ -21,11 +21,8 @@ services:
       POSTGRES_PASSWORD: $DB_PASS
       POSTGRES_DB: $DB_NAME
       PGDATA: "/var/lib/postgresql/data/sso_data"
-    volumes:
-      - ./pgdata:/var/lib/postgresql/data/sso_data/
-      - ./pg_notify:/var/lib/postgresql/data/sso_data/
     ports:
-      - $EXTERNAL_DB_PORT:$DB_PORT
+      - ${EXTERNAL_DB_PORT}:${DB_PORT}
     deploy:
       resources:
         limits:
@@ -73,7 +70,7 @@ services:
       REDIS_HOST: $REDIS_HOST
       REDIS_PASSWORD: $REDIS_PASSWORD
     ports:
-      - $SSO_PORT:$SSO_PORT
+      - ${SSO_PORT}:${SSO_PORT}
     networks:
       - sso-network
 volumes:

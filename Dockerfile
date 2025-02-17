@@ -1,28 +1,38 @@
+# Используем многоступенчатую сборку
 FROM golang:alpine AS builder
 
+# Устанавливаем рабочую директорию
 WORKDIR /sso
 
-COPY cmd/ /sso/cmd/
-COPY config/ /sso/config/
-COPY internal/ /sso/internal/
+# Копируем только необходимые файлы для установки зависимостей
+COPY go.mod go.sum ./
 
-ADD go.mod /sso/
+# Устанавливаем зависимости
+RUN go mod download
 
-RUN export GO111MODULE="on" && go mod tidy
+# Копируем исходный код
+COPY cmd/ ./cmd/
+COPY config/ ./config/
+COPY internal/ ./internal/
 
-# COPY ["cmd", "config", "internal", "migrations", "./"]
+# Собираем приложение
+RUN go build -o /sso/main ./cmd/sso/main.go
 
-RUN go build -o /sso /sso/cmd/sso/main.go
+# Второй этап: создаем минимальный образ
+FROM alpine:latest
 
-FROM alpine
-
+# Устанавливаем рабочую директорию
 WORKDIR /sso
 
-COPY --from=builder /sso /sso/
+# Копируем только собранный бинарник из первого этапа
+COPY --from=builder /sso/main /sso/main
 
+# Копируем конфигурационные файлы
+COPY config/local.yaml ./config/local.yaml
+
+# Метаданные
 LABEL version="v0.5.2" author="OfficialEvsty" desc="Auth service"
 
-# ENV
-
+# Указываем точку входа
 ENTRYPOINT ["/sso/main"]
 CMD ["--config", "./config/local.yaml"]
