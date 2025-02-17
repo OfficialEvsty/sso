@@ -7,6 +7,7 @@ import (
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
@@ -73,6 +74,13 @@ func (s *serverAPI) Login(
 	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
+	}
+
+	// sending metadata pairs as headers
+	md := metadata.Pairs("refresh-token", refresh)
+	err = grpc.SendHeader(ctx, md)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to send header metadata")
 	}
 
 	return &ssov1.LoginResponse{
