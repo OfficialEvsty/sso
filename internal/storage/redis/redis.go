@@ -15,9 +15,11 @@ import (
 
 // Cache using redis provides fast access to important and reusing data
 type Cache struct {
-	rdb        *redis.Client
-	sessionTTL time.Duration
-	useCache   bool
+	rdb                   *redis.Client
+	sessionTTL            time.Duration
+	emailAuthTokenTTL     time.Duration
+	passwordResetTokenTTL time.Duration
+	useCache              bool
 }
 
 // NewCache creates new instance of redis client
@@ -35,7 +37,10 @@ func NewCache(conf *config.RedisConfig, useCache bool) (*Cache, error) {
 		DB:       0,
 	})
 
-	return &Cache{rdb: rdb, sessionTTL: conf.SessionTTL, useCache: useCache}, nil
+	return &Cache{rdb: rdb, sessionTTL: conf.SessionTTL,
+		emailAuthTokenTTL:     conf.EmailAuthTokenTTL,
+		passwordResetTokenTTL: conf.PasswordResetTokenTTL,
+		useCache:              useCache}, nil
 }
 
 // SaveSession saves user's session in cache
@@ -167,6 +172,69 @@ func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "refresh_tokens:" + token
+	err := c.rdb.Del(ctx, tokenKey).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// SaveEmailAuthToken saves token for mail authorization due to check user's email valid
+// If useCache disabled throws error
+func (c *Cache) SaveEmailAuthToken(ctx context.Context, email string, hashPassword string, token string) error {
+
+	if !c.useCache {
+		return storage.InfoCacheDisabled
+	}
+	tokenKey := "mail_auth_token:" + token
+	tokenExpiresAt := time.Now().Add(c.emailAuthTokenTTL).Unix()
+	tokenData := map[string]interface{}{
+		"email":        email,
+		"hashPassword": hashPassword,
+		"expiresAt":    tokenExpiresAt,
+	}
+	err := c.rdb.HSet(ctx, tokenKey, tokenData).Err()
+	if err != nil {
+		return err
+	}
+	err = c.rdb.Expire(ctx, tokenKey, c.emailAuthTokenTTL).Err()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// EmailAuthToken gets cached token, if it not expires
+func (c *Cache) EmailAuthToken(ctx context.Context, token string) (*models.MailAuthToken, error) {
+	if !c.useCache {
+		return nil, storage.InfoCacheDisabled
+	}
+	tokenKey := "mail_auth_token:" + token
+	cachedString, err := c.rdb.HGetAll(ctx, tokenKey).Result()
+	if err != nil {
+		return nil, err
+	}
+	if len(cachedString) == 0 {
+		return nil, storage.InfoCacheKeyNotFound
+	}
+	var cashedToken models.MailAuthToken
+	jsonData, err := json.Marshal(cachedString)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(jsonData, &cashedToken)
+	if err != nil {
+		return nil, err
+	}
+	return &cashedToken, nil
+}
+
+// DeleteEmailAuthToken removes token from cache
+func (c *Cache) DeleteEmailAuthToken(ctx context.Context, token string) error {
+	if !c.useCache {
+		return storage.InfoCacheDisabled
+	}
+	tokenKey := "mail_auth_token:" + token
 	err := c.rdb.Del(ctx, tokenKey).Err()
 	if err != nil {
 		return err

@@ -6,5 +6,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="protos" />
+    <orderEntry type="module" module-name="mailer" />
   </component>
 </module>
