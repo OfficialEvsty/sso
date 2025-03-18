@@ -63,5 +63,15 @@ func (v *Verification) VerifyEmail(ctx context.Context, token string) error {
 		logger.Error("error getting user", err)
 		return err
 	}
-	//todo доделать чо там делал
+	err = v.storage.SaveVerifiedUserEmail(ctx, user.ID, user.Email)
+	if err != nil {
+		logger.Error("error saving verified user email", err)
+		return err
+	}
+	// clear stored token in cache
+	err = v.tokenStorage.DeleteEmailToken(ctx, token)
+	if err != nil {
+		logger.Error("error deleting email token", err)
+	}
+	return nil
 }

@@ -13,7 +13,6 @@ services:
   postgres:
     image: postgres:latest
     container_name: postgres_container
-    env_file: ".env"
     networks:
       - sso-network
     environment:
@@ -23,6 +22,11 @@ services:
       PGDATA: "/var/lib/postgresql/data/sso_data"
     ports:
       - ${EXTERNAL_DB_PORT}:${DB_PORT}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     deploy:
       resources:
         limits:
@@ -43,8 +47,9 @@ services:
     build:
       context: ./cmd/migrator
     depends_on:
-      - postgres
-    env_file: ".env"
+      postgres:
+        condition: service_healthy
+        restart: true
     environment:
       DB_USER: $DB_USER
       DB_PASS: $DB_PASS
@@ -59,7 +64,6 @@ services:
     depends_on:
       - postgres
       - migrator
-    env_file: ".env"
     environment:
       DB_USER: $DB_USER
       DB_PASS: $DB_PASS
