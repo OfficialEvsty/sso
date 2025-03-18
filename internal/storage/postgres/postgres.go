@@ -100,9 +100,11 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 // UserById searches user in database by his ID
 func (s *Storage) UserById(ctx context.Context, userID int64) (models.User, error) {
 	var user models.User
+	// get user (probably non verified)
 	row := s.dbPool.QueryRow(
 		ctx,
-		"SELECT * FROM users WHERE id = $1",
+		"SELECT * FROM users "+
+			"WHERE id = $1",
 		userID,
 	)
 	err := row.Scan(&user.ID, &user.Email, &user.PassHash)
@@ -112,6 +114,21 @@ func (s *Storage) UserById(ctx context.Context, userID int64) (models.User, erro
 		}
 		return models.User{}, err
 	}
+	// get verified user
+	_, err = s.dbPool.Query(
+		ctx,
+		"SELECT * FROM users "+
+			"JOIN email_verification ON users.id = user_id "+
+			"WHERE id = $1",
+		userID,
+	)
+	user.IsEmailVerified = true
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, err
+		}
+		user.IsEmailVerified = false
+	}
 	return user, nil
 }
 
@@ -120,7 +137,8 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	var user models.User
 	row := s.dbPool.QueryRow(
 		ctx,
-		"SELECT * FROM users WHERE email = $1",
+		"SELECT * FROM users "+
+			"WHERE email = $1",
 		email,
 	)
 	err := row.Scan(&user.ID, &user.Email, &user.PassHash)
@@ -129,6 +147,22 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 			return models.User{}, storage.ErrUserNotExist
 		}
 		return models.User{}, err
+	}
+	userID := user.ID
+	// get verified user
+	_, err = s.dbPool.Query(
+		ctx,
+		"SELECT * FROM users "+
+			"JOIN email_verification ON users.id = user_id "+
+			"WHERE id = $1",
+		userID,
+	)
+	user.IsEmailVerified = true
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return models.User{}, err
+		}
+		user.IsEmailVerified = false
 	}
 
 	return user, nil
@@ -399,4 +433,20 @@ func (s *Storage) RevokeRole(ctx context.Context, userID int64, roleId int32) (b
 		return false, err
 	}
 	return true, nil
+}
+
+// SaveVerifiedUserEmail confirms user's verification in storage
+func (s *Storage) SaveVerifiedUserEmail(ctx context.Context, userID int64, email string) error {
+	row := s.dbPool.QueryRow(
+		ctx,
+		"INSERT INTO email_verification (user_id, email) VALUES ($1, $2) RETURNING id",
+		userID,
+		email,
+	)
+	var userVerifiedID int64
+	err := row.Scan(&userVerifiedID)
+	if err != nil {
+		return err
+	}
+	return nil
 }

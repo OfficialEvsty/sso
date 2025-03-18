@@ -179,9 +179,9 @@ func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
 	return nil
 }
 
-// SaveEmailAuthToken saves token for mail authorization due to check user's email valid
+// SaveEmailToken saves token for mail authorization due to check user's email valid
 // If useCache disabled throws error
-func (c *Cache) SaveEmailAuthToken(ctx context.Context, email string, hashPassword string, token string) error {
+func (c *Cache) SaveEmailToken(ctx context.Context, email string, token string) error {
 
 	if !c.useCache {
 		return storage.InfoCacheDisabled
@@ -189,9 +189,8 @@ func (c *Cache) SaveEmailAuthToken(ctx context.Context, email string, hashPasswo
 	tokenKey := "mail_auth_token:" + token
 	tokenExpiresAt := time.Now().Add(c.emailAuthTokenTTL).Unix()
 	tokenData := map[string]interface{}{
-		"email":        email,
-		"hashPassword": hashPassword,
-		"expiresAt":    tokenExpiresAt,
+		"email":     email,
+		"expiresAt": tokenExpiresAt,
 	}
 	err := c.rdb.HSet(ctx, tokenKey, tokenData).Err()
 	if err != nil {
@@ -204,8 +203,8 @@ func (c *Cache) SaveEmailAuthToken(ctx context.Context, email string, hashPasswo
 	return nil
 }
 
-// EmailAuthToken gets cached token, if it not expires
-func (c *Cache) EmailAuthToken(ctx context.Context, token string) (*models.MailAuthToken, error) {
+// EmailToken gets cached token, if it not expires and verify email attached to user
+func (c *Cache) EmailToken(ctx context.Context, token string) (*models.MailAuthToken, error) {
 	if !c.useCache {
 		return nil, storage.InfoCacheDisabled
 	}
@@ -229,8 +228,8 @@ func (c *Cache) EmailAuthToken(ctx context.Context, token string) (*models.MailA
 	return &cashedToken, nil
 }
 
-// DeleteEmailAuthToken removes token from cache
-func (c *Cache) DeleteEmailAuthToken(ctx context.Context, token string) error {
+// DeleteEmailToken removes token from cache
+func (c *Cache) DeleteEmailToken(ctx context.Context, token string) error {
 	if !c.useCache {
 		return storage.InfoCacheDisabled
 	}
