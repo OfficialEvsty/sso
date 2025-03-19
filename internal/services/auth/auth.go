@@ -104,6 +104,11 @@ func (a *Auth) Login(
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
+	fmt.Println(user)
+	if !user.IsEmailVerified {
+		return "", "", storage.ErrUserNotConfirmedEmail
+	}
+
 	log.Info("user logged in successfully")
 
 	// Getting current user's roles

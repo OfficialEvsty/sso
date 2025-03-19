@@ -73,6 +73,9 @@ func (s *serverAPI) Login(
 	}
 	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
 	if err != nil {
+		if errors.Is(err, storage.ErrUserNotConfirmedEmail) {
+			return nil, status.Error(codes.PermissionDenied, "user not confirmed email")
+		}
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
 

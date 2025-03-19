@@ -115,18 +115,22 @@ func (s *Storage) UserById(ctx context.Context, userID int64) (models.User, erro
 		return models.User{}, err
 	}
 	// get verified user
-	_, err = s.dbPool.Query(
+	rows, err := s.dbPool.Query(
 		ctx,
 		"SELECT * FROM users "+
 			"JOIN email_verification ON users.id = user_id "+
 			"WHERE users.id = $1",
 		userID,
 	)
+	defer rows.Close()
 	user.IsEmailVerified = true
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return models.User{}, err
 		}
+		user.IsEmailVerified = false
+	}
+	if !rows.Next() {
 		user.IsEmailVerified = false
 	}
 	return user, nil
@@ -150,18 +154,22 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	}
 	userID := user.ID
 	// get verified user
-	_, err = s.dbPool.Query(
+	rows, err := s.dbPool.Query(
 		ctx,
 		"SELECT * FROM users "+
 			"JOIN email_verification ON users.id = user_id "+
 			"WHERE users.id = $1",
 		userID,
 	)
+	defer rows.Close()
 	user.IsEmailVerified = true
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return models.User{}, err
 		}
+		user.IsEmailVerified = false
+	}
+	if !rows.Next() {
 		user.IsEmailVerified = false
 	}
 
