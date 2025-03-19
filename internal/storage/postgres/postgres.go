@@ -119,7 +119,7 @@ func (s *Storage) UserById(ctx context.Context, userID int64) (models.User, erro
 		ctx,
 		"SELECT * FROM users "+
 			"JOIN email_verification ON users.id = user_id "+
-			"WHERE id = $1",
+			"WHERE users.id = $1",
 		userID,
 	)
 	user.IsEmailVerified = true
@@ -154,7 +154,7 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 		ctx,
 		"SELECT * FROM users "+
 			"JOIN email_verification ON users.id = user_id "+
-			"WHERE id = $1",
+			"WHERE users.id = $1",
 		userID,
 	)
 	user.IsEmailVerified = true

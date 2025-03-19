@@ -7,6 +7,7 @@ import (
 	"sso/internal/services/access"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
+	"sso/internal/services/verification"
 	"sso/internal/storage/cached_postgres"
 	"sso/internal/storage/postgres"
 	"sso/internal/storage/redis"
@@ -59,7 +60,15 @@ func New(
 		storage,
 		storage,
 	)
-	grpcApp := grpcapp.New(log, authService, sessionService, accessService, grpcPort)
+
+	verificationService := verification.New(
+		log,
+		storage,
+		cache,
+		cache,
+		storage,
+	)
+	grpcApp := grpcapp.New(log, authService, sessionService, accessService, verificationService, grpcPort)
 
 	return &App{
 		GRPCSrv: grpcApp,

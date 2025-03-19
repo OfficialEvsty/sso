@@ -8,9 +8,11 @@ import (
 	accessrpc "sso/internal/grpc/access"
 	authrpc "sso/internal/grpc/auth"
 	sessionrpc "sso/internal/grpc/session"
+	verificationrpc "sso/internal/grpc/verification"
 	"sso/internal/services/access"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
+	"sso/internal/services/verification"
 )
 
 type App struct {
@@ -25,6 +27,7 @@ func New(
 	authService *auth.Auth,
 	sessionService *session.Session,
 	accessService *access.Access,
+	verificationService *verification.Verification,
 	port int,
 ) *App {
 	gRPCServer := grpc.NewServer()
@@ -32,6 +35,7 @@ func New(
 	authrpc.Register(gRPCServer, authService)
 	sessionrpc.Register(gRPCServer, sessionService)
 	accessrpc.Register(gRPCServer, accessService)
+	verificationrpc.Register(gRPCServer, verificationService)
 
 	return &App{
 		log:        log,

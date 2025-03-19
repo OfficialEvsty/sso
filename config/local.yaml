@@ -2,8 +2,6 @@ env: "local" #dev, prod
 conn_string: "postgres:postgres@localhost:5433/sso_db" #currently unused
 token_ttl: 15m
 refresh_token_ttl: 24h
-email_auth_token_ttl: 24h
-password_reset_token_ttl: 1h
 session_enabled: true
 use_cache: true
 grpc:
@@ -15,3 +13,5 @@ redis:
   password: ""
   db: 0
   session_ttl: 15m
+  email_auth_token_ttl: 24h
+  password_reset_token_ttl: 1h

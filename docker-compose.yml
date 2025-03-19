@@ -6,6 +6,8 @@ services:
     env_file: ".env"
     environment:
       REDIS_PASSWORD: $REDIS_PASSWORD
+      EXTERNAL_REDIS_PORT: $EXTERNAL_REDIS_PORT
+      REDIS_PORT: $REDIS_PORT
     networks:
       - sso-network
     ports:
@@ -19,11 +21,13 @@ services:
       POSTGRES_USER: $DB_USER
       POSTGRES_PASSWORD: $DB_PASS
       POSTGRES_DB: $DB_NAME
+      EXTERNAL_DB_PORT: $EXTERNAL_DB_PORT
+      DB_PORT: $DB_PORT
       PGDATA: "/var/lib/postgresql/data/sso_data"
     ports:
       - ${EXTERNAL_DB_PORT}:${DB_PORT}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}" ]
+      test: [ "CMD-SHELL", "pg_isready -d sso_db -U postgres" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -49,7 +53,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-        restart: true
     environment:
       DB_USER: $DB_USER
       DB_PASS: $DB_PASS
@@ -65,6 +68,7 @@ services:
       - postgres
       - migrator
     environment:
+      SSO_PORT: $SSO_PORT
       DB_USER: $DB_USER
       DB_PASS: $DB_PASS
       DB_HOST: $DB_HOST

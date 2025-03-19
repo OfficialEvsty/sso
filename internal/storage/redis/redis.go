@@ -187,7 +187,7 @@ func (c *Cache) SaveEmailToken(ctx context.Context, email string, token string) 
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "mail_auth_token:" + token
-	tokenExpiresAt := time.Now().Add(c.emailAuthTokenTTL).Unix()
+	tokenExpiresAt := time.Now().Add(c.emailAuthTokenTTL)
 	tokenData := map[string]interface{}{
 		"email":     email,
 		"expiresAt": tokenExpiresAt,
@@ -221,7 +221,7 @@ func (c *Cache) EmailToken(ctx context.Context, token string) (*models.MailAuthT
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(jsonData, &cashedToken)
+	err = json.Unmarshal([]byte(jsonData), &cashedToken)
 	if err != nil {
 		return nil, err
 	}
