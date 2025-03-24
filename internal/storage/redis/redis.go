@@ -182,7 +182,6 @@ func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
 // SaveEmailToken saves token for mail authorization due to check user's email valid
 // If useCache disabled throws error
 func (c *Cache) SaveEmailToken(ctx context.Context, email string, token string) error {
-
 	if !c.useCache {
 		return storage.InfoCacheDisabled
 	}

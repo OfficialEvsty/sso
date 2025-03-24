@@ -36,8 +36,13 @@ func New(
 // SaveEmailToken writes token data in storage
 func (v *Verification) SaveEmailToken(ctx context.Context, email string, token string) error {
 	op := "verification.SaveEmailToken"
-	mailProvider := strings.Split(email, "@")[1]
+	mailSliced := strings.Split(email, "@")
+	mailProvider := "not stated"
+	if len(mailSliced) > 0 {
+		mailProvider = mailSliced[1]
+	}
 	logger := v.log.With(slog.String("op", op), slog.String("email-provider", mailProvider))
+	logger.Debug("token successfully saved")
 	err := v.tokenStorage.SaveEmailToken(ctx, email, token)
 	if err != nil {
 		logger.Error("error saving email token", err)
