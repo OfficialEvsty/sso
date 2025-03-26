@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
 CREATE TABLE IF NOT EXISTS app_roles (
     id SERIAL PRIMARY KEY,
-    role_id INTEGER REFERENCES roles(is) ON DELETE CASCADE,
+    role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
     app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id),
     FOREIGN KEY (app_id) REFERENCES apps(id)
