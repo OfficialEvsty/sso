@@ -38,11 +38,11 @@ func (v *Verification) SaveEmailToken(ctx context.Context, email string, token s
 	op := "verification.SaveEmailToken"
 	mailSliced := strings.Split(email, "@")
 	mailProvider := "not stated"
-	if len(mailSliced) > 0 {
+	if len(mailSliced) > 1 {
 		mailProvider = mailSliced[1]
 	}
 	logger := v.log.With(slog.String("op", op), slog.String("email-provider", mailProvider))
-	logger.Debug("token successfully saved")
+	logger.Info("token successfully saved")
 	err := v.tokenStorage.SaveEmailToken(ctx, email, token)
 	if err != nil {
 		logger.Error("error saving email token", err)
@@ -61,8 +61,12 @@ func (v *Verification) VerifyEmail(ctx context.Context, token string) error {
 		return err
 	}
 	email := eToken.Email
-	mailProvider := strings.Split(email, "@")[1]
-	logger.Debug("email-provider verified as", slog.String("email", mailProvider))
+	mailSliced := strings.Split(email, "@")
+	mailProvider := "not stated"
+	if len(mailSliced) > 1 {
+		mailProvider = mailSliced[1]
+	}
+	logger.Info("email-provider verified as", slog.String("email", mailProvider))
 	user, err := v.userProvider.User(ctx, email)
 	if err != nil {
 		logger.Error("error getting user", err)

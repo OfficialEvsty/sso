@@ -13,6 +13,7 @@ type UserStorage interface {
 		email string,
 		passHash []byte,
 	) (uid int64, err error)
+	DeleteUser(ctx context.Context, uid int64) (err error)
 }
 
 type UserProvider interface {

@@ -12,6 +12,7 @@ import (
 	"sso/internal/services/auth/interfaces"
 	interfaces3 "sso/internal/services/session/interfaces"
 	"sso/internal/storage"
+	"strconv"
 	"time"
 )
 
@@ -196,6 +197,21 @@ func (a *Auth) RegisterNewUser(
 	}
 	log.Info("successfully registered user")
 	return id, nil
+}
+
+// DeleteUser deletes user and his dependencies from storage
+func (a *Auth) DeleteUser(ctx context.Context, id int64) error {
+	const op = "auth.DeleteUser"
+	log := a.log.With(slog.String("op", op), slog.String("id", strconv.FormatInt(id, 10)))
+	err := a.usrStorage.DeleteUser(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			log.Info("user not found")
+		}
+		log.Error("failed to delete user", err.Error())
+		return err
+	}
+	return nil
 }
 
 // IsAdmin checks whether this user an admin

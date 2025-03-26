@@ -72,6 +72,16 @@ func NewRefreshToken() (string, error) {
 	return base64.URLEncoding.EncodeToString(token), nil
 }
 
+// NewVerifyingToken returns verify token
+func NewVerifyingToken() (string, error) {
+	token := make([]byte, 20)
+	_, err := rand.Read(token)
+	if err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(token), nil
+}
+
 // ValidateAccessToken checks if access token is valid
 func ValidateAccessToken(tokenString string, secret string) (*AccessToken, error) {
 	token, err := jwt.Parse(tokenString,

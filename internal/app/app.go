@@ -2,6 +2,7 @@ package app
 
 import (
 	"log/slog"
+	"sso/internal/api/mail"
 	grpcapp "sso/internal/app/grpc"
 	"sso/internal/config"
 	"sso/internal/services/access"
@@ -31,6 +32,7 @@ func New(
 	storage, err := postgres.New(storagePath)
 	cache, err := redis.NewCache(&redisConfig, useCache)
 	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
+	mailService, err := mail.NewMailClient(log)
 	if err != nil {
 		panic(err)
 	}
@@ -68,7 +70,8 @@ func New(
 		cache,
 		storage,
 	)
-	grpcApp := grpcapp.New(log, authService, sessionService, accessService, verificationService, grpcPort)
+
+	grpcApp := grpcapp.New(log, authService, sessionService, accessService, verificationService, mailService, grpcPort)
 
 	return &App{
 		GRPCSrv: grpcApp,

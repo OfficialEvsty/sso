@@ -176,6 +176,24 @@ func (s *Storage) User(ctx context.Context, email string) (models.User, error) {
 	return user, nil
 }
 
+// DeleteUser deletes user with dependencies (refresh token+email verification)
+func (s *Storage) DeleteUser(ctx context.Context, userID int64) error {
+	result, err := s.dbPool.Query(ctx,
+		"DELETE FROM users WHERE id = $1",
+		userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return errors.New("timeout exceeded: " + err.Error())
+		}
+		return errors.New("error deleting user: " + err.Error())
+	}
+	defer result.Close()
+	return nil
+}
+
 // IsAdmin checks whether this user an admin
 func (s *Storage) IsAdmin(ctx context.Context, userID int64) (bool, error) {
 	const op = "storage.postgres.IsAdmin"

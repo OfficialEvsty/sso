@@ -30,6 +30,8 @@ COPY --from=builder /sso/main /sso/main
 # Копируем конфигурационные файлы
 COPY config/local.yaml ./config/local.yaml
 
+COPY internal/api/mail/template.json ./mail/template.json
+
 # Метаданные
 LABEL version="v0.5.2" author="OfficialEvsty" desc="Auth service"
 

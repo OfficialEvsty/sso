@@ -5,16 +5,16 @@
 
 CREATE TABLE IF NOT EXISTS user_roles (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    role_id INTEGER NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    role_id INTEGER REFERENCES roles(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (role_id) REFERENCES roles(id)
 );
 
 CREATE TABLE IF NOT EXISTS app_roles (
     id SERIAL PRIMARY KEY,
-    role_id INTEGER NOT NULL,
-    app_id INTEGER NOT NULL,
+    role_id INTEGER REFERENCES roles(is) ON DELETE CASCADE,
+    app_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
     FOREIGN KEY (role_id) REFERENCES roles(id),
     FOREIGN KEY (app_id) REFERENCES apps(id)
 );

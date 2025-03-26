@@ -9,8 +9,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"log"
+	"sso/internal/api/mail"
+	"sso/internal/lib/jwt"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
+	"sso/internal/services/verification"
 	"sso/internal/storage"
 )
 
@@ -48,12 +52,14 @@ const (
 
 type serverAPI struct {
 	ssov1.UnimplementedAuthServiceServer
-	auth auth.Auth
-	s    session.Session
+	auth         auth.Auth
+	verification verification.Verification
+	mailer       mail.MailClient
+	s            session.Session
 }
 
-func Register(gRPC *grpc.Server, auth *auth.Auth) {
-	ssov1.RegisterAuthServiceServer(gRPC, &serverAPI{auth: *auth})
+func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Verification, mailer *mail.MailClient) {
+	ssov1.RegisterAuthServiceServer(gRPC, &serverAPI{auth: *auth, verification: *verification, mailer: *mailer})
 }
 
 // Login's handler
@@ -75,6 +81,9 @@ func (s *serverAPI) Login(
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotConfirmedEmail) {
 			return nil, status.Error(codes.PermissionDenied, "user not confirmed email")
+		}
+		if errors.Is(err, storage.ErrUserNotExist) {
+			return nil, status.Error(codes.NotFound, "user does not exist")
 		}
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
@@ -103,7 +112,11 @@ func (s *serverAPI) Register(
 	if req.GetPassword() == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing password")
 	}
+	if req.GetCallbackUrl() == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing callback url")
+	}
 
+	// registering a user
 	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		if errors.Is(err, storage.ErrUserExists) {
@@ -113,6 +126,37 @@ func (s *serverAPI) Register(
 		fmt.Print(err.Error())
 		return nil, status.Error(codes.Internal, "permission denied")
 	}
+
+	var operationsSuccessful bool
+	defer func() {
+		if !operationsSuccessful {
+			// Если что-то пошло не так — удаляем пользователя
+			if err := s.auth.DeleteUser(ctx, userID); err != nil {
+				log.Printf("Failed to rollback user registration: %v", err)
+			}
+			log.Println("rollback user registration success")
+		}
+	}()
+
+	// generating token
+	token, err := jwt.NewVerifyingToken()
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to verify token")
+	}
+
+	// saving token
+	err = s.verification.SaveEmailToken(ctx, req.GetEmail(), token)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to save email token")
+	}
+
+	// send mail
+	callbackUrlWithToken := req.GetCallbackUrl() + token
+	err = s.mailer.SendVerificationMail(ctx, req.GetEmail(), callbackUrlWithToken)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to send verification mail")
+	}
+	operationsSuccessful = true
 	return &ssov1.RegisterResponse{UserId: userID}, nil
 }
 
@@ -147,13 +191,13 @@ func (s *serverAPI) RefreshToken(
 
 	if err != nil {
 		if errors.Is(err, storage.ErrTokenExpired) {
-			return nil, status.Error(codes.PermissionDenied, "refresh token expired")
+			return nil, status.Error(codes.FailedPrecondition, "refresh token expired")
 		}
 		if errors.Is(err, storage.ErrTokenInvalid) {
-			return nil, status.Error(codes.PermissionDenied, "invalid refresh token")
+			return nil, status.Error(codes.FailedPrecondition, "invalid refresh token")
 		}
 		if errors.Is(err, storage.ErrUserNotFound) {
-			return nil, status.Error(codes.PermissionDenied, "user not found")
+			return nil, status.Error(codes.NotFound, "user not found")
 		}
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
@@ -161,7 +205,7 @@ func (s *serverAPI) RefreshToken(
 	access, refresh, err := s.auth.UpdateTokens(ctx, userToken, userID, appID)
 	if err != nil {
 		if errors.Is(err, storage.ErrAppNotFound) {
-			return nil, status.Error(codes.InvalidArgument, "app not found")
+			return nil, status.Error(codes.NotFound, "app not found")
 		}
 		return nil, status.Error(codes.Internal, "internal server error")
 	}
@@ -186,7 +230,7 @@ func (s *serverAPI) LogoutAll(
 	err := s.auth.CompleteLogout(ctx, userID, token)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
-			return nil, status.Error(codes.InvalidArgument, "user not found")
+			return nil, status.Error(codes.NotFound, "user not found")
 		}
 		return nil, status.Error(codes.Internal, "internal server error")
 	}

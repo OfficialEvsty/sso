@@ -5,6 +5,7 @@ import (
 	"google.golang.org/grpc"
 	"log/slog"
 	"net"
+	"sso/internal/api/mail"
 	accessrpc "sso/internal/grpc/access"
 	authrpc "sso/internal/grpc/auth"
 	sessionrpc "sso/internal/grpc/session"
@@ -28,11 +29,12 @@ func New(
 	sessionService *session.Session,
 	accessService *access.Access,
 	verificationService *verification.Verification,
+	mailService *mail.MailClient,
 	port int,
 ) *App {
 	gRPCServer := grpc.NewServer()
 
-	authrpc.Register(gRPCServer, authService)
+	authrpc.Register(gRPCServer, authService, verificationService, mailService)
 	sessionrpc.Register(gRPCServer, sessionService)
 	accessrpc.Register(gRPCServer, accessService)
 	verificationrpc.Register(gRPCServer, verificationService)

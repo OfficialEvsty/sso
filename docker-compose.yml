@@ -77,6 +77,8 @@ services:
       REDIS_PORT: $REDIS_PORT
       REDIS_HOST: $REDIS_HOST
       REDIS_PASSWORD: $REDIS_PASSWORD
+      MAIL_HOST: $MAIL_HOST
+      MAIL_PORT: $MAIL_PORT
     ports:
       - ${SSO_PORT}:${SSO_PORT}
     networks:
