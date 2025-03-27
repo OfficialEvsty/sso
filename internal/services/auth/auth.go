@@ -169,15 +169,14 @@ func (a *Auth) RegisterNewUser(
 
 	// get user if exists
 	user, err := a.usrProvider.User(ctx, email)
-	if !errors.Is(err, storage.ErrUserNotExist) {
-		log.Error("failed to get user", err.Error())
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	log.Info("registering user")
-
 	// save user if not exists or get id of existing user
 	if err != nil {
+		if !errors.Is(err, storage.ErrUserNotExist) {
+			log.Error("failed to get user", err.Error())
+			return 0, fmt.Errorf("%s: %w", op, err)
+		}
+
+		log.Info("registering user")
 		// generating password's hash
 		passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
@@ -194,15 +193,22 @@ func (a *Auth) RegisterNewUser(
 			return 0, fmt.Errorf("%s: %w", op, err)
 		}
 		log.Info("successfully registered user")
-	} else {
-		// checks if user verified
-		if user.IsEmailVerified {
-			log.Info("user already registered")
-			return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
-		}
-		// user exists but not verified
-		userID = user.ID
+		return userID, nil
 	}
+
+	// 3. user data exists
+	if &user == nil {
+		log.Error("user data is nil")
+		return 0, fmt.Errorf("%s: invalid user data", op)
+	}
+
+	// checks if user verified
+	if user.IsEmailVerified {
+		log.Info("user already registered")
+		return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+	}
+	// user exists but not verified
+	userID = user.ID
 	return userID, nil
 }
 
