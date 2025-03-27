@@ -121,7 +121,7 @@ func (s *serverAPI) Register(
 	if err != nil {
 		if errors.Is(err, storage.ErrUserExists) {
 			fmt.Print(err.Error())
-			return nil, status.Error(codes.FailedPrecondition, "user exists")
+			return nil, status.Error(codes.AlreadyExists, "user exists")
 		}
 		fmt.Print(err.Error())
 		return nil, status.Error(codes.Internal, "permission denied")
