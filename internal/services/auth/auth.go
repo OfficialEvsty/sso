@@ -152,7 +152,6 @@ func (a *Auth) Login(
 }
 
 // / Register a new user and hashed password
-// /
 // / Returns user's id
 // / Save user in a local storage (database)
 func (a *Auth) RegisterNewUser(
@@ -166,37 +165,45 @@ func (a *Auth) RegisterNewUser(
 		slog.String("op", op),
 		slog.String("email", email),
 	)
+	var userID int64
+
+	// get user if exists
+	user, err := a.usrProvider.User(ctx, email)
+	if !errors.Is(err, storage.ErrUserNotExist) {
+		log.Error("failed to get user", err.Error())
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
 
 	log.Info("registering user")
 
-	passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	// save user if not exists or get id of existing user
 	if err != nil {
-		log.Error("failed to generate password's hash", err.Error())
-
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	_, err = a.usrProvider.User(ctx, email)
-	if err != nil {
-		if !errors.Is(err, storage.ErrUserNotExist) {
-			log.Error("failed to get user", err.Error())
+		// generating password's hash
+		passHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Error("failed to generate password's hash", err.Error())
 			return 0, fmt.Errorf("%s: %w", op, err)
 		}
-	} else {
-		log.Info("user already registered")
-		return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
-	}
-
-	id, err := a.usrStorage.SaveUser(ctx, email, passHash)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserExists) {
-			log.Error(storage.ErrUserExists.Error(), err.Error())
+		// save user
+		userID, err = a.usrStorage.SaveUser(ctx, email, passHash)
+		if err != nil {
+			if errors.Is(err, storage.ErrUserExists) {
+				log.Error(storage.ErrUserExists.Error(), err.Error())
+			}
+			log.Error("failed to save user", err.Error())
+			return 0, fmt.Errorf("%s: %w", op, err)
 		}
-		log.Error("failed to save user", err.Error())
-		return 0, fmt.Errorf("%s: %w", op, err)
+		log.Info("successfully registered user")
+	} else {
+		// checks if user verified
+		if user.IsEmailVerified {
+			log.Info("user already registered")
+			return 0, fmt.Errorf("%s: %w", op, storage.ErrUserExists)
+		}
+		// user exists but not verified
+		userID = user.ID
 	}
-	log.Info("successfully registered user")
-	return id, nil
+	return userID, nil
 }
 
 // DeleteUser deletes user and his dependencies from storage

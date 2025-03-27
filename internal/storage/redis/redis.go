@@ -215,16 +215,16 @@ func (c *Cache) EmailToken(ctx context.Context, token string) (*models.MailAuthT
 	if len(cachedString) == 0 {
 		return nil, storage.InfoCacheKeyNotFound
 	}
-	var cashedToken models.MailAuthToken
+	var cachedToken models.MailAuthToken
 	jsonData, err := json.Marshal(cachedString)
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal([]byte(jsonData), &cashedToken)
+	err = json.Unmarshal([]byte(jsonData), &cachedToken)
 	if err != nil {
 		return nil, err
 	}
-	return &cashedToken, nil
+	return &cachedToken, nil
 }
 
 // DeleteEmailToken removes token from cache
