@@ -29,10 +29,6 @@ type Auth struct {
 	refreshTTL     time.Duration
 }
 
-var (
-	ErrInvalidCredentials = "invalid credentials"
-)
-
 // New returns a new instance of the Auth service
 func New(
 	log *slog.Logger,
@@ -84,7 +80,7 @@ func (a *Auth) Login(
 		if errors.Is(err, storage.ErrUserNotFound) {
 			a.log.Warn("user not found", err.Error())
 
-			return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+			return "", "", fmt.Errorf("%s: %w", op, err)
 		}
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
@@ -94,7 +90,7 @@ func (a *Auth) Login(
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
 		a.log.Info("invalid credentials", err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, ErrInvalidCredentials)
+		return "", "", storage.ErrInvalidCredentials
 	}
 	log.Info("token generated successfully")
 	app, err := a.appProvider.App(ctx, appID)

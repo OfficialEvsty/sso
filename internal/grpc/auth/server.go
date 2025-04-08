@@ -85,6 +85,9 @@ func (s *serverAPI) Login(
 		if errors.Is(err, storage.ErrUserNotExist) {
 			return nil, status.Error(codes.NotFound, "user does not exist")
 		}
+		if errors.Is(err, storage.ErrInvalidCredentials) {
+			return nil, status.Error(codes.PermissionDenied, "invalid credentials")
+		}
 		return nil, status.Error(codes.PermissionDenied, "permission denied")
 	}
 

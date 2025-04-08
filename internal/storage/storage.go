@@ -13,6 +13,7 @@ var (
 	ErrRoleNotFound            = errors.New("role not found")
 	ErrPermissionDenied        = errors.New("you has no permissions for this action")
 	ErrUserNotConfirmedEmail   = errors.New("user not confirmed email")
+	ErrInvalidCredentials      = errors.New("invalid credentials")
 	InfoCacheDisabled          = errors.New("info cache is disabled")
 	InfoCacheKeyNotFound       = errors.New("cache key not found")
 	InfoUserAlreadyHasRole     = errors.New("user already has role")

@@ -8,6 +8,8 @@ github.com/OfficialEvsty/protos v0.3.2 h1:YiSvbg8MTvN/5xdTmxPbgXxun5wIW9ewyM6L4G
 github.com/OfficialEvsty/protos v0.3.2/go.mod h1:6DzUOJwiqh6numRIk8kNRAXdPwF8KRXL/ofN4gptMl4=
 github.com/OfficialEvsty/protos v0.3.5 h1:BftOU+OQJP3td6JNMJ9qzTEDO7nWLEqHfdYuhXOSU3k=
 github.com/OfficialEvsty/protos v0.3.5/go.mod h1:6DzUOJwiqh6numRIk8kNRAXdPwF8KRXL/ofN4gptMl4=
+github.com/OfficialEvsty/protos v0.4.0 h1:hLaeeLw2ZvV0IyKN4D9NV6QCcTPhNHL5/MJO5wa8D94=
+github.com/OfficialEvsty/protos v0.4.0/go.mod h1:6DzUOJwiqh6numRIk8kNRAXdPwF8KRXL/ofN4gptMl4=
 github.com/brianvoe/gofakeit/v6 v6.23.2 h1:lVde18uhad5wII/f5RMVFLtdQNE0HaGFuBUXmYKk8i8=
 github.com/brianvoe/gofakeit/v6 v6.23.2/go.mod h1:Ow6qC71xtwm79anlwKRlWZW6zVq9D2XHE4QSSMP/rU8=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=

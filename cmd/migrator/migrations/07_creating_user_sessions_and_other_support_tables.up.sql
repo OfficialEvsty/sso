@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS sessions (
+    id SERIAL PRIMARY KEY,
+    client_id INTEGER REFERENCES apps(id) ON DELETE CASCADE,
+    ipv4 VARCHAR(15) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (client_id) REFERENCES apps(id)
+)
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+)
+
+CREATE TABLE IF NOT EXISTS authorization_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+
+)
