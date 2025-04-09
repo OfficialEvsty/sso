@@ -2,7 +2,9 @@ env: "local" #dev, prod
 conn_string: "postgres:postgres@localhost:5433/sso_db" #currently unused
 token_ttl: 15m
 refresh_token_ttl: 24h
+session_ttl: 48h
 session_enabled: true
+authorization_code_ttl: 5m
 use_cache: true
 grpc:
   port: 44043

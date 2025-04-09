@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -74,7 +75,8 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	if req.RedirectUri == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing redirect uri")
 	}
-	if req.CodeChallenge == "" {
+	cc, err := uuid.Parse(req.GetCodeChallenge())
+	if req.CodeChallenge == "" || err != nil {
 		return nil, status.Error(codes.InvalidArgument, "missing code challenge")
 	}
 	if req.ResponseType == "" {
@@ -89,11 +91,12 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	if req.Scope == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing scope")
 	}
+
 	pkce := &models.PKCE{
-		CodeChallenge: req.CodeChallenge,
-		Method:        req.CodeChallengeMethod,
+		CodeChallenge: cc,
+		Method:        req.GetCodeChallengeMethod(),
 	}
-	err := s.auth.AuthorizeByCurrentSession(ctx, req.Scope, req.State, pkce)
+	code, err := s.auth.AuthorizeByCurrentSession(ctx, req.Scope, req.State, pkce)
 	if err != nil {
 		if errors.Is(err, storage.ErrNoMetadataContext) {
 			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
@@ -101,7 +104,25 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 		if !errors.Is(err, storage.InfoUserUnauthenticated) {
 			return nil, status.Error(codes.Internal, "internal server error while authorization by current session")
 		}
+		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req)
+		return &ssov1.AuthorizeResponse{
+			Response: &ssov1.AuthorizeResponse_AuthRequired{
+				AuthRequired: &ssov1.AuthenticationRequired{
+					LoginUrl:  loginUri,
+					SessionId: sessionID,
+				},
+			},
+		}, err
 	}
+	return &ssov1.AuthorizeResponse{
+		Response: &ssov1.AuthorizeResponse_Success{
+			Success: &ssov1.SuccessResponse{
+				RedirectUri: req.RedirectUri,
+				Code:        code.String(),
+				State:       req.GetState(),
+			},
+		},
+	}, nil
 }
 
 // Login's handler
@@ -116,10 +137,7 @@ func (s *serverAPI) Login(
 	if req.GetPassword() == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing password")
 	}
-	if req.GetAppId() == emptyValue {
-		return nil, status.Error(codes.InvalidArgument, "missing app id")
-	}
-	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword(), req.GetAppId())
+	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotConfirmedEmail) {
 			return nil, status.Error(codes.PermissionDenied, "user not confirmed email")
@@ -140,9 +158,11 @@ func (s *serverAPI) Login(
 		return nil, status.Error(codes.Internal, "failed to send header metadata")
 	}
 
+	//todo переделать
 	return &ssov1.LoginResponse{
-		AccessToken:  access,
-		RefreshToken: refresh,
+		RedirectUri: access,
+		Code:        refresh,
+		State:       "",
 	}, nil
 }
 

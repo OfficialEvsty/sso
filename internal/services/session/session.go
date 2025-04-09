@@ -37,23 +37,23 @@ func (s *Session) SaveUserSession(
 ) (sessionID string, err error) {
 	const op = "session.SaveUserSession"
 
-	sessionID, err = s.sessionStorage.SaveSession(
-		ctx,
-		userID,
-		appID,
-		ip,
-		device,
-	)
-	if err != nil {
-		if !(errors.Is(err, storage.InfoCacheDisabled)) {
-			return "", fmt.Errorf("%s: %w", op, err)
-		}
-		s.log.Warn("session was not saved, cache disabled", op, sessionID)
-		return "", fmt.Errorf("%s: %w", op, err)
-	}
-	s.log.Info("session successfully saved", op, sessionID)
+	//sessionID, err = s.sessionStorage.SaveSession(
+	//	ctx,
+	//	userID,
+	//	appID,
+	//	ip,
+	//	device,
+	//)
+	//if err != nil {
+	//	if !(errors.Is(err, storage.InfoCacheDisabled)) {
+	//		return "", fmt.Errorf("%s: %w", op, err)
+	//	}
+	//	s.log.Warn("session was not saved, cache disabled", op, sessionID)
+	//	return "", fmt.Errorf("%s: %w", op, err)
+	//}
+	//s.log.Info("session successfully saved", op, sessionID)
 
-	return sessionID, nil
+	return "", nil
 }
 
 // GetUserSessions return list of active user's sessions

@@ -35,10 +35,12 @@ func main() {
 		cfg.UseCache,
 		cfg.TokenTTL,
 		cfg.RefreshTokenTTL,
+		cfg.SessionTTL,
+		cfg.AuthorizationCodeTTL,
 	)
 
 	go application.GRPCSrv.MustRun()
-	
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
 

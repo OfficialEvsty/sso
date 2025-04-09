@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
@@ -20,16 +22,18 @@ import (
 )
 
 type Auth struct {
-	log            *slog.Logger
-	usrStorage     interfaces.UserStorage
-	usrProvider    interfaces.UserProvider
-	appProvider    interfaces.AppProvider
-	tokenCleaner   interfaces.TokenCleaner
-	tokenProvider  interfaces.TokenProvider
-	roleProvider   interfaces2.RoleProvider
-	sessionStorage interfaces3.SessionStorage
-	tokenTTL       time.Duration
-	refreshTTL     time.Duration
+	log                  *slog.Logger
+	usrStorage           interfaces.UserStorage
+	usrProvider          interfaces.UserProvider
+	appProvider          interfaces.AppProvider
+	tokenCleaner         interfaces.TokenCleaner
+	tokenProvider        interfaces.TokenProvider
+	roleProvider         interfaces2.RoleProvider
+	sessionStorage       interfaces3.SessionStorage
+	tokenTTL             time.Duration
+	refreshTTL           time.Duration
+	sessionTTL           time.Duration
+	authorizationCodeTTL time.Duration
 }
 
 // New returns a new instance of the Auth service
@@ -44,54 +48,90 @@ func New(
 	roleProvider interfaces2.RoleProvider,
 	tokenTTL time.Duration,
 	refreshTokenTTL time.Duration,
+	sessionTTL time.Duration,
+	authorizationCodeTTL time.Duration,
 ) *Auth {
 	return &Auth{
-		usrStorage:     userStorage,
-		usrProvider:    userProvider,
-		appProvider:    appProvider,
-		tokenCleaner:   tokenCleaner,
-		tokenProvider:  tokenProvider,
-		sessionStorage: sessionStorage,
-		roleProvider:   roleProvider,
-		log:            log,
-		tokenTTL:       tokenTTL,
-		refreshTTL:     refreshTokenTTL,
+		usrStorage:           userStorage,
+		usrProvider:          userProvider,
+		appProvider:          appProvider,
+		tokenCleaner:         tokenCleaner,
+		tokenProvider:        tokenProvider,
+		sessionStorage:       sessionStorage,
+		roleProvider:         roleProvider,
+		log:                  log,
+		tokenTTL:             tokenTTL,
+		refreshTTL:           refreshTokenTTL,
+		sessionTTL:           sessionTTL,
+		authorizationCodeTTL: authorizationCodeTTL,
 	}
 }
 
 // AuthorizeByCurrentSession try to get user's session from metadata and authorize user if it valid
 // If current session are empty or not valid throws error
-func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, state string, pkce *models.PKCE) error {
+func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, state string, pkce *models.PKCE) (uuid.UUID, error) {
 	const op = "auth.AuthorizeByCurrentSession"
 	logger := a.log.With(slog.String("op", op))
 	sessionID, err := utilities.GetUserSession(ctx, logger)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
+	logger.Info("sessionID successfully extracted from cookie", sessionID) //todo убрать потом
 	// checks if session valid and stores in user_sessions
 	// checks redirect uri specified in request
 	// updates scope in existing user's session
 	// saves code challenge as pkce model bound to current session
 	// generate authorization code and saves it
+	return uuid.New(), nil
 }
 
 // AuthorizeByLogin uses when user haven't active session and MUST provide his credentials to server to verify his identity
 // If session successfully created server redirect user to login page
-func (a *Auth) AuthorizeByLogin(ctx context.Context) error {
+func (a *Auth) AuthorizeByLogin(ctx context.Context, req *ssov1.AuthorizeRequest) (string, string, error) {
 	const op = "auth.AuthorizeByLogin"
 	logger := a.log.With(slog.String("op", op))
 	const loginRouteName = "oauth"
 	loginRedirect := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), loginRouteName)
-	// checks if client_id correct
-	// checks if ipv4 provided
-	client_ip, err := utilities.GetClientIPFromMetadata(ctx, logger)
+	// checks if client_id and redirect_uri correct
+	clientID, err := strconv.Atoi(req.GetClientId())
 	if err != nil {
-
+		logger.Error("error while converting string to int")
+		return "", "", err
+	}
+	redirectURI := req.GetRedirectUri()
+	scope := req.GetScope()
+	state := req.GetState()
+	// checks if ipv4 provided
+	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
+	if err != nil {
+		return "", "", err
 	}
 	// checks if scope are correct
 	// create session object and saves it
+	session := &models.OAuthSession{
+		ClientId:  clientID,
+		Ip:        clientIP,
+		Scope:     scope,
+		ExpiresAt: time.Now().Add(a.sessionTTL),
+	}
+	sessionID, err := a.sessionStorage.SaveOAuthSession(ctx, session)
+	if err != nil {
+		logger.Error("error while saving session", err.Error())
+		return "", "", err
+	}
 	// saves additional session info: redirect, state
+	sessionMetadata := &models.SessionMetadata{
+		RedirectUri: redirectURI,
+		State:       state,
+		SessionID:   sessionID,
+	}
+	_, err = a.sessionStorage.SaveSessionMetadata(ctx, sessionMetadata)
+	if err != nil {
+		logger.Error("error while saving session metadata", err.Error())
+		return "", "", err
+	}
 	// saves code challenge as pkce model bound to current session
+	return sessionID.String(), loginRedirect, nil
 }
 
 // Login checks if user with given credentials exists in system
@@ -102,7 +142,6 @@ func (a *Auth) Login(
 	ctx context.Context,
 	email string,
 	password string,
-	appID int32,
 ) (access string, refresh string, err error) {
 	const op = "auth.Login"
 
@@ -131,13 +170,13 @@ func (a *Auth) Login(
 		return "", "", storage.ErrInvalidCredentials
 	}
 	log.Info("token generated successfully")
-	app, err := a.appProvider.App(ctx, appID)
-	if err != nil {
-		if errors.Is(err, storage.ErrAppNotFound) {
-			log.Error(storage.ErrAppNotFound.Error(), err.Error())
-		}
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
+	//app, err := a.appProvider.App(ctx, appID)
+	//if err != nil {
+	//	if errors.Is(err, storage.ErrAppNotFound) {
+	//		log.Error(storage.ErrAppNotFound.Error(), err.Error())
+	//	}
+	//	return "", "", fmt.Errorf("%s: %w", op, err)
+	//}
 
 	fmt.Println(user)
 	if !user.IsEmailVerified {
@@ -147,12 +186,13 @@ func (a *Auth) Login(
 	log.Info("user logged in successfully")
 
 	// Getting current user's roles
-	roles, err := a.roleProvider.UserRoles(ctx, user.ID, appID)
+	roles, err := a.roleProvider.UserRoles(ctx, user.ID)
 	if err != nil {
 		a.log.Error("error getting user roles, default role was returned", op, err.Error())
 		roles = &[]string{"member"}
 	}
-	refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
+	fmt.Print(roles)
+	//refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
 
 	if err != nil {
 		a.log.Error("failed to generate tokens", err.Error())
@@ -174,13 +214,13 @@ func (a *Auth) Login(
 	}
 
 	// not strict if error pass
-	_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
-	if err != nil {
-		if !(errors.Is(err, storage.InfoCacheDisabled)) {
-			a.log.Error("failed to save session", err.Error())
-		}
-		a.log.Warn("session was not saved, cache disabled", err.Error())
-	}
+	//_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+	//if err != nil {
+	//	if !(errors.Is(err, storage.InfoCacheDisabled)) {
+	//		a.log.Error("failed to save session", err.Error())
+	//	}
+	//	a.log.Warn("session was not saved, cache disabled", err.Error())
+	//}
 
 	return access, refresh, nil
 }
@@ -337,7 +377,7 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	roles, err := a.roleProvider.UserRoles(ctx, user.ID, appID)
+	roles, err := a.roleProvider.UserRoles(ctx, user.ID)
 	if err != nil {
 		a.log.Error("error getting user roles", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
@@ -372,13 +412,13 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 		}
 	}
 
-	_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
-	if err != nil {
-		if !(errors.Is(err, storage.InfoCacheDisabled) || errors.Is(err, storage.InfoSessionsDisabled)) {
-			a.log.Error("failed to save session", err.Error())
-			return "", "", fmt.Errorf("%s: %w", op, err)
-		}
-	}
+	//_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+	//if err != nil {
+	//	if !(errors.Is(err, storage.InfoCacheDisabled) || errors.Is(err, storage.InfoSessionsDisabled)) {
+	//		a.log.Error("failed to save session", err.Error())
+	//		return "", "", fmt.Errorf("%s: %w", op, err)
+	//	}
+	//}
 
 	return access, refresh, nil
 }

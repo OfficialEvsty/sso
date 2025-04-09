@@ -28,6 +28,8 @@ func New(
 	useCache bool,
 	tokenTTL time.Duration,
 	refreshTTL time.Duration,
+	sessionTTL time.Duration,
+	authorizationCodeTTL time.Duration,
 ) *App {
 	storage, err := postgres.New(storagePath)
 	cache, err := redis.NewCache(&redisConfig, useCache)
@@ -43,14 +45,16 @@ func New(
 		storage,
 		storage,
 		cashedStorage,
-		cache,
+		storage,
 		storage,
 		tokenTTL,
 		refreshTTL,
+		sessionTTL,
+		authorizationCodeTTL,
 	)
 	sessionService := session.New(
 		log,
-		cache,
+		storage,
 		cache,
 		sessionEnabled,
 	)

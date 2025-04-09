@@ -10,7 +10,7 @@ import (
 )
 
 // GetClientIPFromMetadata supports func for extracting client ip from metadata
-func GetClientIPFromMetadata(ctx context.Context, logger slog.Logger) (string, error) {
+func GetClientIPFromMetadata(ctx context.Context, logger *slog.Logger) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
 		logger.Error("error while receiving metadata from context", slog.String("metadata_keys", strconv.Itoa(md.Len())))

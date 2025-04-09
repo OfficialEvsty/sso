@@ -8,14 +8,16 @@ import (
 )
 
 type Config struct {
-	Env             string        `yaml:"env" env-default:"local"`
-	StoragePath     string        `yaml:"conn_string" env-required:"true"`
-	TokenTTL        time.Duration `yaml:"token_ttl" env-required:"true"`
-	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
-	SessionEnabled  bool          `yaml:"session_enabled"`
-	UseCache        bool          `yaml:"use_cache"`
-	GRPC            GRPCConfig    `yaml:"grpc" env-required:"true"`
-	Redis           RedisConfig   `yaml:"redis" env-required:"true"`
+	Env                  string        `yaml:"env" env-default:"local"`
+	StoragePath          string        `yaml:"conn_string" env-required:"true"`
+	TokenTTL             time.Duration `yaml:"token_ttl" env-required:"true"`
+	RefreshTokenTTL      time.Duration `yaml:"refresh_token_ttl" env-required:"true"`
+	SessionTTL           time.Duration `yaml:"session_ttl" env-required:"true"`
+	AuthorizationCodeTTL time.Duration `yaml:"authorization_code_ttl" env-required:"true"`
+	SessionEnabled       bool          `yaml:"session_enabled"`
+	UseCache             bool          `yaml:"use_cache"`
+	GRPC                 GRPCConfig    `yaml:"grpc" env-required:"true"`
+	Redis                RedisConfig   `yaml:"redis" env-required:"true"`
 }
 
 type GRPCConfig struct {

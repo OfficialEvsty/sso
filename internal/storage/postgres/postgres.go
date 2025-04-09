@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"reflect"
 	"sso/internal/domain/models"
 	"sso/internal/lib/extensions"
 	"sso/internal/storage"
+	"strings"
 	"time"
 )
 
@@ -74,10 +77,119 @@ func getConnString(conf config) string {
 	return result
 }
 
+// saveOrUpdate сохраняет или обновляет структуру в таблице и возвращает ID
+func (s *Storage) saveOrUpdate(ctx context.Context, table string, data interface{}, conflictField string) (interface{}, error) {
+	val := reflect.ValueOf(data).Elem()
+	typ := val.Type()
+
+	var fields []string
+	var placeholders []string
+	var values []interface{}
+	var updates []string
+	counter := 1
+
+	// Определяем имя поля ID (может быть не только "id")
+	idField := conflictField
+	for i := 0; i < typ.NumField(); i++ {
+		if tag := typ.Field(i).Tag.Get("db"); tag == "id" {
+			idField = tag
+			break
+		}
+	}
+
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		dbTag := field.Tag.Get("db")
+		if dbTag == "" || dbTag == "-" {
+			continue
+		}
+
+		fields = append(fields, dbTag)
+		placeholders = append(placeholders, fmt.Sprintf("$%d", counter))
+		values = append(values, val.Field(i).Interface())
+
+		// Не обновляем поле ID при конфликте
+		if dbTag != idField {
+			updates = append(updates, fmt.Sprintf("%s = $%d", dbTag, counter))
+		}
+		counter++
+	}
+
+	// Добавляем RETURNING id в запрос
+	query := fmt.Sprintf(
+		`INSERT INTO %s (%s) VALUES (%s) 
+         ON CONFLICT (%s) DO UPDATE SET %s
+         RETURNING %s`,
+		table,
+		strings.Join(fields, ", "),
+		strings.Join(placeholders, ", "),
+		idField,
+		strings.Join(updates, ", "),
+		idField,
+	)
+
+	var id interface{}
+	err := s.dbPool.QueryRow(ctx, query, values...).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to save/update record: %w", err)
+	}
+
+	return id, nil
+}
+
+func (s *Storage) CheckClientAndRedirectUri(ctx context.Context, clientId int, redirectUri string) error {
+	row := s.dbPool.QueryRow(
+		ctx,
+		`SELECT id FROM apps WHERE client_id = $1 AND redirect_uri = $2`,
+		clientId,
+		redirectUri,
+	)
+	var id int
+	err := row.Scan(&id)
+	if err != nil {
+		return errors.New("error checking client id and redirect uri: " + err.Error())
+	}
+	return nil
+}
+
+func (s *Storage) SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error) {
+	table := "sessions"
+	session.Id = uuid.New()
+	sessionID, err := s.saveOrUpdate(ctx, table, session, "id")
+	if err != nil {
+		return uuid.Nil, err
+	}
+	uid, err := uuid.Parse(sessionID.(string))
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uid, nil
+}
+
+func (s *Storage) SaveSessionMetadata(ctx context.Context, sm *models.SessionMetadata) (int64, error) {
+	row := s.dbPool.QueryRow(
+		ctx,
+		`INSERT INTO redirect_uris(uri, state, session_id) VALUES($1,$2,$3) RETURNING id`,
+		sm.RedirectUri,
+		sm.State,
+		sm.SessionID,
+	)
+	var id int64
+	err := row.Scan(&id)
+	if err != nil {
+		var pgxError *pgconn.PgError
+		if errors.As(err, &pgxError) {
+			if pgxError.Code == "23505" {
+				return 0, errors.New("session metadata already exists")
+			}
+		}
+		return 0, err
+	}
+	return id, nil
+}
+
 // SaveUser saves user in data table 'users'
 func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
-	const op = "storage.postgres.SaveUser"
-
 	var id int64
 	err := s.dbPool.QueryRow(
 		ctx,
@@ -389,7 +501,6 @@ func (s *Storage) HasRole(ctx context.Context, userID int64, roleId int32) (bool
 func (s *Storage) UserRoles(
 	ctx context.Context,
 	userID int64,
-	appID int32,
 ) (*[]string, error) {
 	var roles = []string{"member"}
 	// Finds intersection of left join and inner join with condition
@@ -406,13 +517,12 @@ func (s *Storage) UserRoles(
 	sql := "SELECT name FROM roles AS r " +
 		"JOIN user_roles AS ur on r.id = ur.role_id " +
 		"LEFT JOIN app_roles AS ar ON r.id = ar.role_id " +
-		"WHERE ur.user_id = $1 AND (ar.app_id = $2 OR ar.app_id IS NULL);"
+		"WHERE ur.user_id = $1 AND (ar.app_id IS NULL);"
 
 	rows, err := s.dbPool.Query(
 		ctx,
 		sql,
 		userID,
-		appID,
 	)
 	defer rows.Close()
 	if err != nil {
