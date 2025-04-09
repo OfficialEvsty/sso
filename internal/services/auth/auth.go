@@ -7,7 +7,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
+	"os"
+	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
+	"sso/internal/lib/utilities"
 	interfaces2 "sso/internal/services/access/interfaces"
 	"sso/internal/services/auth/interfaces"
 	interfaces3 "sso/internal/services/session/interfaces"
@@ -54,6 +57,41 @@ func New(
 		tokenTTL:       tokenTTL,
 		refreshTTL:     refreshTokenTTL,
 	}
+}
+
+// AuthorizeByCurrentSession try to get user's session from metadata and authorize user if it valid
+// If current session are empty or not valid throws error
+func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, state string, pkce *models.PKCE) error {
+	const op = "auth.AuthorizeByCurrentSession"
+	logger := a.log.With(slog.String("op", op))
+	sessionID, err := utilities.GetUserSession(ctx, logger)
+	if err != nil {
+		return err
+	}
+	// checks if session valid and stores in user_sessions
+	// checks redirect uri specified in request
+	// updates scope in existing user's session
+	// saves code challenge as pkce model bound to current session
+	// generate authorization code and saves it
+}
+
+// AuthorizeByLogin uses when user haven't active session and MUST provide his credentials to server to verify his identity
+// If session successfully created server redirect user to login page
+func (a *Auth) AuthorizeByLogin(ctx context.Context) error {
+	const op = "auth.AuthorizeByLogin"
+	logger := a.log.With(slog.String("op", op))
+	const loginRouteName = "oauth"
+	loginRedirect := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), loginRouteName)
+	// checks if client_id correct
+	// checks if ipv4 provided
+	client_ip, err := utilities.GetClientIPFromMetadata(ctx, logger)
+	if err != nil {
+
+	}
+	// checks if scope are correct
+	// create session object and saves it
+	// saves additional session info: redirect, state
+	// saves code challenge as pkce model bound to current session
 }
 
 // Login checks if user with given credentials exists in system

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 	"log"
 	"sso/internal/api/mail"
+	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
@@ -60,6 +61,47 @@ type serverAPI struct {
 
 func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Verification, mailer *mail.MailClient) {
 	ssov1.RegisterAuthServiceServer(gRPC, &serverAPI{auth: *auth, verification: *verification, mailer: *mailer})
+}
+
+// Authorize OAuth2.0 specification authorization method
+// If user has the active session simplify redirects with authorization code
+// Else creates initial session and redirects user on login page
+// Throw error if faces unpredictably behaviour
+func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) (*ssov1.AuthorizeResponse, error) {
+	if req.ClientId == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing client id")
+	}
+	if req.RedirectUri == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing redirect uri")
+	}
+	if req.CodeChallenge == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing code challenge")
+	}
+	if req.ResponseType == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing response type")
+	}
+	if req.State == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing state")
+	}
+	if req.CodeChallengeMethod == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing code challenge_method")
+	}
+	if req.Scope == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing scope")
+	}
+	pkce := &models.PKCE{
+		CodeChallenge: req.CodeChallenge,
+		Method:        req.CodeChallengeMethod,
+	}
+	err := s.auth.AuthorizeByCurrentSession(ctx, req.Scope, req.State, pkce)
+	if err != nil {
+		if errors.Is(err, storage.ErrNoMetadataContext) {
+			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
+		}
+		if !errors.Is(err, storage.InfoUserUnauthenticated) {
+			return nil, status.Error(codes.Internal, "internal server error while authorization by current session")
+		}
+	}
 }
 
 // Login's handler
