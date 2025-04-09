@@ -69,32 +69,14 @@ func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Ver
 // Else creates initial session and redirects user on login page
 // Throw error if faces unpredictably behaviour
 func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) (*ssov1.AuthorizeResponse, error) {
-	if req.ClientId == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing client id")
-	}
-	if req.RedirectUri == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing redirect uri")
-	}
-	cc, err := uuid.Parse(req.GetCodeChallenge())
-	if req.CodeChallenge == "" || err != nil {
-		return nil, status.Error(codes.InvalidArgument, "missing code challenge")
-	}
-	if req.ResponseType == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing response type")
-	}
-	if req.State == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing state")
-	}
-	if req.CodeChallengeMethod == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing code challenge_method")
-	}
-	if req.Scope == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing scope")
-	}
 
-	pkce := &models.PKCE{
-		CodeChallenge: cc,
-		Method:        req.GetCodeChallengeMethod(),
+	err := validateAuthorizeRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	pkce, err := parsePKCE(req.GetCodeChallenge(), req.GetCodeChallengeMethod())
+	if err != nil {
+		return nil, err
 	}
 	code, err := s.auth.AuthorizeByCurrentSession(ctx, req.Scope, req.State, pkce)
 	if err != nil {
@@ -123,6 +105,44 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 			},
 		},
 	}, nil
+}
+
+// validateAuthorizeRequest provide request args validation
+func validateAuthorizeRequest(req *ssov1.AuthorizeRequest) error {
+	if req.GetClientId() == "" {
+		return status.Error(codes.InvalidArgument, "missing client id")
+	}
+	if req.GetRedirectUri() == "" {
+		return status.Error(codes.InvalidArgument, "missing redirect uri")
+	}
+	if req.GetResponseType() == "" {
+		return status.Error(codes.InvalidArgument, "missing response type")
+	}
+	if req.GetState() == "" {
+		return status.Error(codes.InvalidArgument, "missing state")
+	}
+	if req.GetCodeChallengeMethod() == "" {
+		return status.Error(codes.InvalidArgument, "missing code challenge_method")
+	}
+	if req.GetScope() == "" {
+		return status.Error(codes.InvalidArgument, "missing scope")
+	}
+	if req.GetCodeChallenge() == "" {
+		return status.Error(codes.InvalidArgument, "missing code challenge")
+	}
+	return nil
+}
+
+func parsePKCE(code string, method string) (*models.PKCE, error) {
+	cc, err := uuid.Parse(code)
+	if err != nil {
+		return nil, err
+	}
+	pkce := &models.PKCE{
+		CodeChallenge: cc,
+		Method:        method,
+	}
+	return pkce, nil
 }
 
 // Login's handler

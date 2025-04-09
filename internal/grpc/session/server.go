@@ -20,7 +20,7 @@ func Register(gRPC *grpc.Server, s *session.Session) {
 	ssov1.RegisterSessionServiceServer(gRPC, &sessionAPI{s: *s})
 }
 
-// GetUserSessions returns all user's sessions authentificated in different apps
+// GetUserSessions returns all user's sessions authenticated in different apps
 func (s *sessionAPI) GetUserSessions(
 	ctx context.Context,
 	req *ssov1.UserSessionsRequest,
