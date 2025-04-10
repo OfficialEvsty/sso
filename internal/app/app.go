@@ -12,6 +12,7 @@ import (
 	"sso/internal/storage/cached_postgres"
 	"sso/internal/storage/postgres"
 	"sso/internal/storage/redis"
+	"sso/internal/storage/repositories"
 	"time"
 )
 
@@ -52,6 +53,7 @@ func New(
 		sessionTTL,
 		authorizationCodeTTL,
 		storage,
+		repositories.NewIPRepository(storage.GetConnection()),
 	)
 	sessionService := session.New(
 		log,

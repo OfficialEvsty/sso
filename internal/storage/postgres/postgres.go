@@ -48,6 +48,10 @@ type Storage struct {
 	dbPool *pgxpool.Pool
 }
 
+func (s *Storage) GetConnection() *pgxpool.Pool {
+	return s.dbPool
+}
+
 // New initialize an instance of storage db context
 func New(storagePath string) (*Storage, error) {
 	const op = "storage.postgres.New"
@@ -688,23 +692,31 @@ func (s *Storage) validateRedirectURI(ctx context.Context, redirectUri string) e
 	return nil
 }
 
-// ValidateActiveSession validate active user's session
-func (s *Storage) ValidateActiveSession(ctx context.Context, sessionID string) (time.Time, string, error) {
-	var expiresAt time.Time
-	var ipv4 string
+// ActiveSession gets active user's session
+func (s *Storage) ActiveSession(ctx context.Context, sessionID string) (*models.UserSession, error) {
+	var userSession models.UserSession
 	row := s.dbPool.QueryRow(
 		ctx,
-		`SELECT s.expires_at, s.ipv4 FROM user_sessions AS us 
+		`SELECT us.id, us.user_id, s.id, s.client_id, s.ipv4, s.scope, s.created_at, s.expires_at FROM user_sessions AS us 
 		JOIN sessions AS s ON us.session_id = s.id 
 		WHERE us.session_id = $1`,
 		sessionID,
 	)
-	err := row.Scan(&expiresAt, &ipv4)
+	err := row.Scan(
+		&userSession.Id,
+		&userSession.UserId,
+		&userSession.Session.Id,
+		&userSession.Session.ClientId,
+		&userSession.Session.Ip,
+		&userSession.Session.Scope,
+		&userSession.Session.CreatedAt,
+		&userSession.Session.ExpiresAt,
+	)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return time.Time{}, "", err
+			return nil, err
 		}
-		return time.Time{}, "", pgx.ErrNoRows
+		return nil, pgx.ErrNoRows
 	}
-	return expiresAt, ipv4, nil
+	return &userSession, nil
 }

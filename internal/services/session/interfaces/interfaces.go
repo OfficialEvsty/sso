@@ -18,6 +18,7 @@ type SessionStorage interface {
 
 	SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error)
 	SaveSessionMetadata(ctx context.Context, session *models.SessionMetadata) (int64, error)
+	ActiveSession(ctx context.Context, sessionID string) (*models.UserSession, error)
 }
 
 // SessionProvider provides operations with session terminate/get session

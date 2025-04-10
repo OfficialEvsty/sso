@@ -2,8 +2,11 @@ package repositories
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"sso/internal/storage"
 )
 
 type IPRepository struct {
@@ -54,4 +57,21 @@ func (r *IPRepository) GetAllUserTrustedIPv4(ctx context.Context, userID int64) 
 		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 	return trustedIPs, nil
+}
+
+// CheckUserTrustedIPv4 checks whether ipv4 trusted by specified user
+func (r *IPRepository) CheckUserTrustedIPv4(ctx context.Context, ipv4 string) error {
+	var id interface{}
+	err := r.db.QueryRow(
+		ctx,
+		`SELECT id FROM user_trusted_ips WHERE ipv4 = $1`,
+		ipv4,
+	).Scan(&id)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("failed to query trusted ip: %w: ", err)
+		}
+		return storage.InfoTrustedIPNotFound
+	}
+	return nil
 }

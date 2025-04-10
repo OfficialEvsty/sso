@@ -43,7 +43,7 @@ type TokenProvider interface {
 // Changes if request args will change
 type AuthRequestValidator interface {
 	AuthorizeRequestValidate(ctx context.Context, clientID interface{}, redirectUri string, scope string, responseType string) (string, error)
-	ValidateActiveSession(ctx context.Context, sessionID string) (time.Time, string, error)
+	ActiveSession(ctx context.Context, sessionID string) (*models.UserSession, error)
 }
 
 // IPProvider saves/gets user's trusted ip via login

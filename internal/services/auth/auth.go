@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"log/slog"
 	"os"
+	"slices"
 	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
 	"sso/internal/lib/utilities"
@@ -37,6 +38,7 @@ type Auth struct {
 	authorizationCodeTTL time.Duration
 
 	requestValidator interfaces.AuthRequestValidator
+	ipProvider       interfaces.IPProvider
 }
 
 // New returns a new instance of the Auth service
@@ -54,6 +56,7 @@ func New(
 	sessionTTL time.Duration,
 	authorizationCodeTTL time.Duration,
 	requestValidator interfaces.AuthRequestValidator,
+	ipProvider interfaces.IPProvider,
 ) *Auth {
 	return &Auth{
 		usrStorage:           userStorage,
@@ -69,6 +72,7 @@ func New(
 		sessionTTL:           sessionTTL,
 		authorizationCodeTTL: authorizationCodeTTL,
 		requestValidator:     requestValidator,
+		ipProvider:           ipProvider,
 	}
 }
 
@@ -92,7 +96,7 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 		return uuid.Nil, err
 	}
 	// checks if session valid and stores in user_sessions
-	expiresAt, ipv4, err := a.requestValidator.ValidateActiveSession(ctx, sessionID)
+	session, err := a.requestValidator.ActiveSession(ctx, sessionID)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, err
@@ -100,14 +104,23 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 		// make a handler for this exception
 		return uuid.Nil, pgx.ErrNoRows
 	}
-	if sessionExpires := time.Now().Unix() > expiresAt.Unix(); sessionExpires {
+	if sessionExpires := time.Now().Unix() > session.Session.ExpiresAt.Unix(); sessionExpires {
 		return uuid.Nil, storage.InfoSessionExpired
 	}
-	if unknownIPv4 := clientIP != ipv4; unknownIPv4 {
+	trustedIPs, err := a.ipProvider.GetAllUserTrustedIPv4(ctx, session.UserId)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if unknownIPv4 := !slices.Contains(trustedIPs, clientIP); unknownIPv4 {
 		return uuid.Nil, storage.InfoIPChanged
 	}
 	logger.Info("session approved", sessionID)
 	// updates scope in existing user's session
+	sessionUID, err := a.sessionStorage.SaveOAuthSession(ctx, &session.Session)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	logger.Info("session scope changed, ", slog.String("session_id", sessionUID.String()))
 	// saves code challenge as pkce model bound to current session
 	// generate authorization code and saves it
 	return uuid.New(), nil

@@ -16,9 +16,9 @@ type OAuthSession struct {
 }
 
 type UserSession struct {
-	Id      int          `json:"id" db:"id"`
-	UserId  int          `json:"user_id" db:"user_id"`
-	Session OAuthSession `json:"session" db:"os"`
+	Id      int64        `json:"id" db:"id"`
+	UserId  int64        `json:"user_id" db:"user_id"`
+	Session OAuthSession `json:"session" db:"session"`
 }
 
 type SessionMetadata struct {

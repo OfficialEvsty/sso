@@ -23,4 +23,5 @@ var (
 	InfoUserUnauthenticated    = errors.New("user session not found")
 	InfoSessionExpired         = errors.New("session is expired")
 	InfoIPChanged              = errors.New("ipv4 address is changed")
+	InfoTrustedIPNotFound      = errors.New("trusted IP not found")
 )
