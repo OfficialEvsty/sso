@@ -21,4 +21,6 @@ var (
 	InfoUserHasNoSpecifiedRole = errors.New("user has no specified role")
 	InfoSessionsDisabled       = errors.New("sessions is disabled")
 	InfoUserUnauthenticated    = errors.New("user session not found")
+	InfoSessionExpired         = errors.New("session is expired")
+	InfoIPChanged              = errors.New("ipv4 address is changed")
 )

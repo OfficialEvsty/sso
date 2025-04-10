@@ -1,23 +1,23 @@
 CREATE TABLE IF NOT EXISTS sessions (
     id VARCHAR(36) PRIMARY KEY,
     client_id INTEGER NOT NULL,
-    ipv4 VARCHAR(15) NOT NULL,
+    ipv4 INET NOT NULL,
     scope TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL,
     FOREIGN KEY (client_id) REFERENCES apps(id)  ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS user_sessions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
     session_id VARCHAR(36) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS redirect_uris (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     uri TEXT NOT NULL,
     state TEXT NOT NULL,
     session_id VARCHAR(36) NOT NULL,

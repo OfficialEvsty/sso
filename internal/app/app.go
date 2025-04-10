@@ -51,6 +51,7 @@ func New(
 		refreshTTL,
 		sessionTTL,
 		authorizationCodeTTL,
+		storage,
 	)
 	sessionService := session.New(
 		log,

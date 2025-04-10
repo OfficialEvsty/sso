@@ -69,8 +69,13 @@ func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Ver
 // Else creates initial session and redirects user on login page
 // Throw error if faces unpredictably behaviour
 func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) (*ssov1.AuthorizeResponse, error) {
-
-	err := validateAuthorizeRequest(req)
+	// check preconditions (fields MUST NOT be empty)
+	err := validateAuthorizeRequestOnEmptyFields(req)
+	if err != nil {
+		return nil, err
+	}
+	// check fields and returns valid scope
+	validScope, err := s.auth.AuthorizeArgsValidate(ctx, req.GetClientId(), req.GetRedirectUri(), req.GetScope(), req.GetResponseType())
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +83,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	if err != nil {
 		return nil, err
 	}
-	code, err := s.auth.AuthorizeByCurrentSession(ctx, req.Scope, req.State, pkce)
+	code, err := s.auth.AuthorizeByCurrentSession(ctx, validScope, req.State, pkce)
 	if err != nil {
 		if errors.Is(err, storage.ErrNoMetadataContext) {
 			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
@@ -86,7 +91,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 		if !errors.Is(err, storage.InfoUserUnauthenticated) {
 			return nil, status.Error(codes.Internal, "internal server error while authorization by current session")
 		}
-		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req)
+		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, req.GetState())
 		return &ssov1.AuthorizeResponse{
 			Response: &ssov1.AuthorizeResponse_AuthRequired{
 				AuthRequired: &ssov1.AuthenticationRequired{
@@ -108,7 +113,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 }
 
 // validateAuthorizeRequest provide request args validation
-func validateAuthorizeRequest(req *ssov1.AuthorizeRequest) error {
+func validateAuthorizeRequestOnEmptyFields(req *ssov1.AuthorizeRequest) error {
 	if req.GetClientId() == "" {
 		return status.Error(codes.InvalidArgument, "missing client id")
 	}

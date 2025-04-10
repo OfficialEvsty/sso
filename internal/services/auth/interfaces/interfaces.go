@@ -37,3 +37,17 @@ type TokenProvider interface {
 	CachedSaveRefreshToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error
 	CachedDeleteRefreshToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error)
 }
+
+// AuthRequestValidator validates request's args in auth service
+// Designed for validation purpose only
+// Changes if request args will change
+type AuthRequestValidator interface {
+	AuthorizeRequestValidate(ctx context.Context, clientID interface{}, redirectUri string, scope string, responseType string) (string, error)
+	ValidateActiveSession(ctx context.Context, sessionID string) (time.Time, string, error)
+}
+
+// IPProvider saves/gets user's trusted ip via login
+type IPProvider interface {
+	SaveTrustedIPv4(ctx context.Context, trustedIP string) error
+	GetAllUserTrustedIPv4(ctx context.Context, userID int64) ([]string, error)
+}

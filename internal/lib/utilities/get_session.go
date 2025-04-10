@@ -25,7 +25,7 @@ func GetUserSession(ctx context.Context, logger *slog.Logger) (string, error) {
 	sessionID := sessionIDs[0]
 	// if session haven't provided
 	if sessionID == "" {
-		logger.Error("user unauthenticated", slog.String("session_id", sessionID))
+		logger.Info("user unauthenticated", slog.String("session_id", sessionID))
 		return "", storage.InfoUserUnauthenticated
 	}
 	return sessionID, nil

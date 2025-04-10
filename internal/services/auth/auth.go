@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"log/slog"
 	"os"
 	"sso/internal/domain/models"
@@ -34,6 +35,8 @@ type Auth struct {
 	refreshTTL           time.Duration
 	sessionTTL           time.Duration
 	authorizationCodeTTL time.Duration
+
+	requestValidator interfaces.AuthRequestValidator
 }
 
 // New returns a new instance of the Auth service
@@ -50,6 +53,7 @@ func New(
 	refreshTokenTTL time.Duration,
 	sessionTTL time.Duration,
 	authorizationCodeTTL time.Duration,
+	requestValidator interfaces.AuthRequestValidator,
 ) *Auth {
 	return &Auth{
 		usrStorage:           userStorage,
@@ -64,7 +68,12 @@ func New(
 		refreshTTL:           refreshTokenTTL,
 		sessionTTL:           sessionTTL,
 		authorizationCodeTTL: authorizationCodeTTL,
+		requestValidator:     requestValidator,
 	}
+}
+
+func (a *Auth) AuthorizeArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, scope string, responseType string) (validScope string, err error) {
+	return a.requestValidator.AuthorizeRequestValidate(ctx, clientID, redirectUri, scope, responseType)
 }
 
 // AuthorizeByCurrentSession try to get user's session from metadata and authorize user if it valid
@@ -76,9 +85,28 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 	if err != nil {
 		return uuid.Nil, err
 	}
-	logger.Info("sessionID successfully extracted from cookie", sessionID) //todo убрать потом
+	logger.Info("sessionID successfully extracted from cookie")
+
+	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
+	if err != nil {
+		return uuid.Nil, err
+	}
 	// checks if session valid and stores in user_sessions
-	// checks redirect uri specified in request
+	expiresAt, ipv4, err := a.requestValidator.ValidateActiveSession(ctx, sessionID)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, err
+		}
+		// make a handler for this exception
+		return uuid.Nil, pgx.ErrNoRows
+	}
+	if sessionExpires := time.Now().Unix() > expiresAt.Unix(); sessionExpires {
+		return uuid.Nil, storage.InfoSessionExpired
+	}
+	if unknownIPv4 := clientIP != ipv4; unknownIPv4 {
+		return uuid.Nil, storage.InfoIPChanged
+	}
+	logger.Info("session approved", sessionID)
 	// updates scope in existing user's session
 	// saves code challenge as pkce model bound to current session
 	// generate authorization code and saves it
@@ -87,31 +115,26 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 
 // AuthorizeByLogin uses when user haven't active session and MUST provide his credentials to server to verify his identity
 // If session successfully created server redirect user to login page
-func (a *Auth) AuthorizeByLogin(ctx context.Context, req *ssov1.AuthorizeRequest) (string, string, error) {
+func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redirectUri string, scope string, state string) (string, string, error) {
 	const op = "auth.AuthorizeByLogin"
 	logger := a.log.With(slog.String("op", op))
 	const loginRouteName = "oauth"
 	loginRedirect := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), loginRouteName)
-	// checks if client_id and redirect_uri correct
-	clientID, err := strconv.Atoi(req.GetClientId())
-	if err != nil {
-		logger.Error("error while converting string to int")
-		return "", "", err
-	}
-	redirectURI := req.GetRedirectUri()
-	scope := req.GetScope()
-	state := req.GetState()
 	// checks if ipv4 provided
 	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
 	if err != nil {
 		return "", "", err
 	}
-	// checks if scope are correct
+	convClientID, err := strconv.Atoi(clientID.(string))
+	if err != nil {
+		return "", "", err
+	}
 	// create session object and saves it
 	session := &models.OAuthSession{
-		ClientId:  clientID,
+		ClientId:  convClientID,
 		Ip:        clientIP,
 		Scope:     scope,
+		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(a.sessionTTL),
 	}
 	sessionID, err := a.sessionStorage.SaveOAuthSession(ctx, session)
@@ -119,9 +142,16 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, req *ssov1.AuthorizeRequest
 		logger.Error("error while saving session", err.Error())
 		return "", "", err
 	}
+	// sets session metadata
+	md := metadata.Pairs("new_session", sessionID.String())
+	err = grpc.SendHeader(ctx, md)
+	if err != nil {
+		logger.Error("error while sending metadata", err.Error())
+		return "", "", err
+	}
 	// saves additional session info: redirect, state
 	sessionMetadata := &models.SessionMetadata{
-		RedirectUri: redirectURI,
+		RedirectUri: redirectUri,
 		State:       state,
 		SessionID:   sessionID,
 	}
@@ -131,6 +161,7 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, req *ssov1.AuthorizeRequest
 		return "", "", err
 	}
 	// saves code challenge as pkce model bound to current session
+
 	return sessionID.String(), loginRedirect, nil
 }
 

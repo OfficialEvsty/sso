@@ -8,7 +8,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"reflect"
 	"sso/internal/domain/models"
 	"sso/internal/lib/extensions"
@@ -585,4 +588,123 @@ func (s *Storage) SaveVerifiedUserEmail(ctx context.Context, userID int64, email
 		return err
 	}
 	return nil
+}
+
+// Validator implementation logic
+
+// AuthorizeRequestValidate validates data provided by the client to verify client identity
+func (s *Storage) AuthorizeRequestValidate(ctx context.Context,
+	clientID interface{},
+	redirectUri string,
+	scope string,
+	responseType string,
+) (validScope string, err error) {
+	// checks client
+	err = s.validateClientID(ctx, clientID)
+	if err != nil {
+		return "", err
+	}
+	// checks redirect uri
+	err = s.validateRedirectURI(ctx, redirectUri)
+	if err != nil {
+		return "", err
+	}
+
+	validScope, err = s.validateScope(ctx, scope)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.ToLower(responseType) != "code" {
+		return validScope, status.Errorf(codes.InvalidArgument, "unsupported response type: %s", responseType)
+	}
+
+	return validScope, nil
+}
+
+// validateScope checks which claims are valid for specified client
+func (s *Storage) validateScope(ctx context.Context, scope string) (validatedScope string, err error) {
+	result := strings.Fields(scope) // Fields handles multiple spaces better than Split
+	if len(result) == 0 {
+		return "", nil
+	}
+	textArray := &pgtype.Array[string]{
+		Elements: result,
+		Valid:    true,
+	}
+
+	rows, err := s.dbPool.Query(
+		ctx,
+		`SELECT id FROM roles WHERE name = ANY($1)`,
+		textArray,
+	)
+	defer rows.Close()
+	var validScopes []string
+	for rows.Next() {
+		var roleName string
+		if err := rows.Scan(&roleName); err != nil {
+			return "", fmt.Errorf("scanning role name failed: %w", err)
+		}
+		validScopes = append(validScopes, roleName)
+	}
+
+	if err := rows.Err(); err != nil {
+		return "", fmt.Errorf("rows iteration failed: %w", err)
+	}
+	return strings.Join(validScopes, " "), nil
+}
+
+// checks if client_id exists
+func (s *Storage) validateClientID(ctx context.Context, clientID interface{}) error {
+	var id interface{}
+	err := s.dbPool.QueryRow(
+		ctx,
+		`SELECT id FROM apps WHERE id = $1`,
+		clientID,
+	).Scan(&id)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		return status.Error(codes.InvalidArgument, "invalid client id: "+clientID.(string))
+	}
+	return nil
+}
+
+// checks if redirect uri correct
+func (s *Storage) validateRedirectURI(ctx context.Context, redirectUri string) error {
+	var id interface{}
+	err := s.dbPool.QueryRow(
+		ctx,
+		`SELECT id FROM apps WHERE redirect_uri = $1`,
+		redirectUri,
+	).Scan(&id)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		return status.Error(codes.InvalidArgument, "invalid redirect uri: "+redirectUri)
+	}
+	return nil
+}
+
+// ValidateActiveSession validate active user's session
+func (s *Storage) ValidateActiveSession(ctx context.Context, sessionID string) (time.Time, string, error) {
+	var expiresAt time.Time
+	var ipv4 string
+	row := s.dbPool.QueryRow(
+		ctx,
+		`SELECT s.expires_at, s.ipv4 FROM user_sessions AS us 
+		JOIN sessions AS s ON us.session_id = s.id 
+		WHERE us.session_id = $1`,
+		sessionID,
+	)
+	err := row.Scan(&expiresAt, &ipv4)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return time.Time{}, "", err
+		}
+		return time.Time{}, "", pgx.ErrNoRows
+	}
+	return expiresAt, ipv4, nil
 }
