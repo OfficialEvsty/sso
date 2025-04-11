@@ -84,6 +84,7 @@ func New(
 	}
 }
 
+// AuthorizeArgsValidate validates Authorize endpoint's request args: clientID, redirectUri, scope, responseType
 func (a *Auth) AuthorizeArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, scope string, responseType string) (validScope string, err error) {
 	return a.requestValidator.AuthorizeRequestValidate(ctx, clientID, redirectUri, scope, responseType)
 }
@@ -104,7 +105,7 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 		return uuid.Nil, err
 	}
 	// checks if session valid and stores in user_sessions
-	session, err := a.requestValidator.ActiveSession(ctx, sessionID)
+	session, err := a.sessionStorage.ActiveSession(ctx, sessionID)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, err
@@ -214,13 +215,27 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redir
 	return sessionID.String(), loginRedirect, nil
 }
 
+// TokenArgsValidate validates Token endpoint's args: clientID, redirectUri, state
+func (a *Auth) TokenArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, authCode string, grant string) (err error) {
+	// todo продолжить реализацию
+	return nil
+}
+
 // Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
 // OAuth2.1 specification method
 // Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
-func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID interface{}) (string, error) {
+func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID interface{}) (set *models.OAuthTokenSet, err error) {
 	const op = "auth.Token"
 	logger := a.log.With(slog.String("op", op))
 	logger.Debug("starts exchanging authorization code on tokens set...")
+	logger.Debug("validates args...")
+	err = a.TokenArgsValidate(ctx, clientID, redirectUri, authCode, grant)
+	if err != nil {
+		return set, err
+	}
+	logger.Info("provided args valid")
+	var tokens models.OAuthTokenSet
+	// todo расписать комменты по сегментам
 	//// Getting current user's roles
 	//roles, err := a.roleProvider.UserRoles(ctx, user.ID)
 	//if err != nil {
@@ -340,7 +355,6 @@ func (a *Auth) Login(
 	redirectUri += fmt.Sprintf("?code=%s&state=%s", authCode.Code, stateParam)
 	return redirectUri, nil
 	// todo все что ниже перенести в логику Token
-
 }
 
 // / Register a new user and hashed password
