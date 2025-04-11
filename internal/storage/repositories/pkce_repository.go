@@ -22,8 +22,9 @@ func NewPKCERepository(db *postgres.ExtPool) *PKCERepository {
 }
 
 // PKCE gets pkce data from db
-func (r *PKCERepository) PKCE(ctx context.Context, sessionID string) (pkce *models.PKCE, err error) {
-	err = r.db.QueryRow(
+func (r *PKCERepository) PKCE(ctx context.Context, sessionID string) (*models.PKCE, error) {
+	var pkce models.PKCE
+	err := r.db.QueryRow(
 		ctx,
 		`SELECT * FROM pkces WHERE session_id = $1`,
 		sessionID,
@@ -34,13 +35,13 @@ func (r *PKCERepository) PKCE(ctx context.Context, sessionID string) (pkce *mode
 		}
 		return nil, fmt.Errorf("erorr this pkce record not found %w", err)
 	}
-	return pkce, nil
+	return &pkce, nil
 }
 
 // SavePKCE saves a pair hashed code and hashed method
 func (r *PKCERepository) SavePKCE(
 	ctx context.Context,
-	pkce models.PKCE,
+	pkce *models.PKCE,
 ) (err error) {
 	_, err = r.db.SaveOrUpdate(
 		ctx,

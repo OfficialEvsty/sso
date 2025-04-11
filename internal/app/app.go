@@ -13,6 +13,7 @@ import (
 	"sso/internal/storage/postgres"
 	"sso/internal/storage/redis"
 	"sso/internal/storage/repositories"
+	"sso/internal/storage/repositories/cached"
 	"time"
 )
 
@@ -36,6 +37,9 @@ func New(
 	cache, err := redis.NewCache(&redisConfig, useCache)
 	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
 	mailService, err := mail.NewMailClient(log)
+
+	// cashed repositories
+	sessionRepository := cached.NewSessionCachedRepository(storage.GetConnection(), cache.GetConnection())
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +50,7 @@ func New(
 		storage,
 		storage,
 		cashedStorage,
-		storage,
+		sessionRepository,
 		storage,
 		tokenTTL,
 		refreshTTL,
@@ -54,10 +58,12 @@ func New(
 		authorizationCodeTTL,
 		storage,
 		repositories.NewIPRepository(storage.GetConnection()),
+		repositories.NewPKCERepository(storage.GetConnection()),
+		repositories.NewAuthCodeRepository(storage.GetConnection()),
 	)
 	sessionService := session.New(
 		log,
-		storage,
+		sessionRepository,
 		cache,
 		sessionEnabled,
 	)

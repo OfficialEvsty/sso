@@ -167,7 +167,7 @@ func (s *Storage) CheckClientAndRedirectUri(ctx context.Context, clientId int, r
 func (s *Storage) SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error) {
 	table := "sessions"
 	session.Id = uuid.New()
-	sessionID, err := s.dbPool.saveOrUpdate(ctx, table, session, "id")
+	sessionID, err := s.dbPool.SaveOrUpdate(ctx, table, session, "id")
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -181,7 +181,7 @@ func (s *Storage) SaveOAuthSession(ctx context.Context, session *models.OAuthSes
 func (s *Storage) SaveSessionMetadata(ctx context.Context, sm *models.SessionMetadata) (int64, error) {
 	row := s.dbPool.QueryRow(
 		ctx,
-		`INSERT INTO redirect_uris(uri, state, session_id) VALUES($1,$2,$3) RETURNING id`,
+		`INSERT INTO session_metadata(uri, state, session_id) VALUES($1,$2,$3) RETURNING id`,
 		sm.RedirectUri,
 		sm.State,
 		sm.SessionID,

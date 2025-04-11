@@ -39,6 +39,8 @@ type Auth struct {
 
 	requestValidator interfaces.AuthRequestValidator
 	ipProvider       interfaces.IPProvider
+	pkceStorage      interfaces.PKCEStorage
+	authCodeStorage  interfaces.AuthCodeStorage
 }
 
 // todo implement a facade pattern here
@@ -58,6 +60,9 @@ func New(
 	authorizationCodeTTL time.Duration,
 	requestValidator interfaces.AuthRequestValidator,
 	ipProvider interfaces.IPProvider,
+	pkceStorage interfaces.PKCEStorage,
+	authCodeStorage interfaces.AuthCodeStorage,
+
 ) *Auth {
 	return &Auth{
 		usrStorage:           userStorage,
@@ -74,6 +79,8 @@ func New(
 		authorizationCodeTTL: authorizationCodeTTL,
 		requestValidator:     requestValidator,
 		ipProvider:           ipProvider,
+		pkceStorage:          pkceStorage,
+		authCodeStorage:      authCodeStorage,
 	}
 }
 
@@ -103,9 +110,14 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 			return uuid.Nil, err
 		}
 		// make a handler for this exception
-		return uuid.Nil, pgx.ErrNoRows
+		return uuid.Nil, storage.InfoUserUnauthenticated
 	}
 	if sessionExpires := time.Now().Unix() > session.Session.ExpiresAt.Unix(); sessionExpires {
+		err = a.sessionStorage.RemoveSession(ctx, session.Session.Id.String())
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("error while removing expired session: %w", err)
+		}
+		logger.Info("session expired and deleted from db")
 		return uuid.Nil, storage.InfoSessionExpired
 	}
 	trustedIPs, err := a.ipProvider.GetAllUserTrustedIPv4(ctx, session.UserId)
@@ -127,14 +139,26 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 	// saves code challenge as pkce model bound to current session
 	pkce.SessionID = sessionUID.String()
 	pkce.ExpiresAt = time.Now().Add(a.authorizationCodeTTL)
-
+	err = a.pkceStorage.SavePKCE(ctx, pkce)
+	if err != nil {
+		return uuid.Nil, err
+	}
 	// generate authorization code and saves it
-	return uuid.New(), nil
+	authCode := &models.AuthorizationCode{
+		Code:      uuid.New(),
+		UserID:    session.UserId,
+		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
+	}
+	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return authCode.Code, nil
 }
 
 // AuthorizeByLogin uses when user haven't active session and MUST provide his credentials to server to verify his identity
 // If session successfully created server redirect user to login page
-func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redirectUri string, scope string, state string) (string, string, error) {
+func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redirectUri string, scope string, pkce *models.PKCE, state string) (string, string, error) {
 	const op = "auth.AuthorizeByLogin"
 	logger := a.log.With(slog.String("op", op))
 	const loginRouteName = "oauth"
@@ -180,8 +204,62 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redir
 		return "", "", err
 	}
 	// saves code challenge as pkce model bound to current session
+	pkce.SessionID = sessionID.String()
+	pkce.ExpiresAt = time.Now().Add(a.authorizationCodeTTL)
+	err = a.pkceStorage.SavePKCE(ctx, pkce)
+	if err != nil {
+		return "", "", err
+	}
 
 	return sessionID.String(), loginRedirect, nil
+}
+
+// Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
+// OAuth2.1 specification method
+// Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
+func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID interface{}) (string, error) {
+	const op = "auth.Token"
+	logger := a.log.With(slog.String("op", op))
+	logger.Debug("starts exchanging authorization code on tokens set...")
+	//// Getting current user's roles
+	//roles, err := a.roleProvider.UserRoles(ctx, user.ID)
+	//if err != nil {
+	//	a.log.Error("error getting user roles, default role was returned", op, err.Error())
+	//	roles = &[]string{"member"}
+	//}
+	//fmt.Print(roles)
+	////refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
+	//
+	//if err != nil {
+	//	a.log.Error("failed to generate tokens", err.Error())
+	//	return "", "", fmt.Errorf("%s: %w", op, err)
+	//}
+	//
+	//err = a.tokenCleaner.RemoveAllUserTokens(ctx, user.ID)
+	//if err != nil {
+	//	a.log.Error("failed to remove user tokens", err.Error())
+	//}
+	//
+	//timeToExpire := time.Now().Add(a.refreshTTL)
+	//err = a.tokenProvider.CachedSaveRefreshToken(ctx, nil, user.ID, refresh, timeToExpire)
+	//if err != nil {
+	//	if !errors.Is(err, storage.InfoCacheDisabled) {
+	//		a.log.Error("failed to save token", err.Error())
+	//		return "", "", fmt.Errorf("%s: %w", op, err)
+	//	}
+	//}
+	//
+	//// not strict if error pass
+	////_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+	////if err != nil {
+	////	if !(errors.Is(err, storage.InfoCacheDisabled)) {
+	////		a.log.Error("failed to save session", err.Error())
+	////	}
+	////	a.log.Warn("session was not saved, cache disabled", err.Error())
+	////}
+	//
+	//return access, refresh, nil
+	return nil, nil
 }
 
 // Login checks if user with given credentials exists in system
@@ -192,87 +270,77 @@ func (a *Auth) Login(
 	ctx context.Context,
 	email string,
 	password string,
-) (access string, refresh string, err error) {
+) (string, error) {
 	const op = "auth.Login"
 
-	log := a.log.With(
+	logger := a.log.With(
 		slog.String("op", op),
 		slog.String("email", email),
 	)
 
-	log.Info("attempting to login user")
+	logger.Info("attempting to login user")
 
 	user, err := a.usrProvider.User(ctx, email)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotFound) {
 			a.log.Warn("user not found", err.Error())
 
-			return "", "", fmt.Errorf("%s: %w", op, err)
+			return "", fmt.Errorf("%s: %w", op, err)
 		}
-		return "", "", fmt.Errorf("%s: %w", op, err)
+		return "", fmt.Errorf("%s: %w", op, err)
 	}
-
-	log.With(op).Info("user found")
-
+	logger.Info("user found")
 	err = bcrypt.CompareHashAndPassword(user.PassHash, []byte(password))
 	if err != nil {
 		a.log.Info("invalid credentials", err.Error())
-		return "", "", storage.ErrInvalidCredentials
+		return "", storage.ErrInvalidCredentials
 	}
-	log.Info("token generated successfully")
-	//app, err := a.appProvider.App(ctx, appID)
-	//if err != nil {
-	//	if errors.Is(err, storage.ErrAppNotFound) {
-	//		log.Error(storage.ErrAppNotFound.Error(), err.Error())
-	//	}
-	//	return "", "", fmt.Errorf("%s: %w", op, err)
-	//}
+	logger.Info("user authorized successfully", slog.String("userID", fmt.Sprintf("%v", user.ID)))
 
-	fmt.Println(user)
 	if !user.IsEmailVerified {
-		return "", "", storage.ErrUserNotConfirmedEmail
+		return "", storage.ErrUserNotConfirmedEmail
 	}
 
-	log.Info("user logged in successfully")
+	logger.Info("user logged in successfully")
 
-	// Getting current user's roles
-	roles, err := a.roleProvider.UserRoles(ctx, user.ID)
+	const redirectRouteName = "redirect"
+	redirectUri := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), redirectRouteName)
+	// extract sessionID from cookies and validates session
+	sessionID, err := utilities.GetUserSession(ctx, logger)
 	if err != nil {
-		a.log.Error("error getting user roles, default role was returned", op, err.Error())
-		roles = &[]string{"member"}
+		return "", err
 	}
-	fmt.Print(roles)
-	//refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
-
+	_, err = a.sessionStorage.Session(ctx, sessionID)
 	if err != nil {
-		a.log.Error("failed to generate tokens", err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	err = a.tokenCleaner.RemoveAllUserTokens(ctx, user.ID)
-	if err != nil {
-		a.log.Error("failed to remove user tokens", err.Error())
-	}
-
-	timeToExpire := time.Now().Add(a.refreshTTL)
-	err = a.tokenProvider.CachedSaveRefreshToken(ctx, nil, user.ID, refresh, timeToExpire)
-	if err != nil {
-		if !errors.Is(err, storage.InfoCacheDisabled) {
-			a.log.Error("failed to save token", err.Error())
-			return "", "", fmt.Errorf("%s: %w", op, err)
+		if !errors.Is(err, storage.InfoSessionNotFound) {
+			return "", err
 		}
+		// todo буквально не знаю что в этом случае делать, но нужно перессылать на главную страницу приложения, чтобы он стучался оттуда
+		return redirectUri, nil
 	}
+	// todo сессия может быть просрочена, но так как это сессия пустышка, то не пугаемся (но не знаем что делать)
+	// --extract client's IP and saves it as trusted IP address (make it step when exchange auth code on tokens)
+	// gets 'state' parameter from db
+	sessionMetadata, err := a.sessionStorage.SessionMetadata(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	stateParam := sessionMetadata.State
+	// create an authorization code and saves it
+	authCode := &models.AuthorizationCode{
+		Code:      uuid.New(),
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
+	}
+	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
+	if err != nil {
+		return "", err
+	}
+	// generate redirect uri with code and state as parameters
+	redirectUri += fmt.Sprintf("?code=%s&state=%s", authCode.Code, stateParam)
+	return redirectUri, nil
+	// todo все что ниже перенести в логику Token
 
-	// not strict if error pass
-	//_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
-	//if err != nil {
-	//	if !(errors.Is(err, storage.InfoCacheDisabled)) {
-	//		a.log.Error("failed to save session", err.Error())
-	//	}
-	//	a.log.Warn("session was not saved, cache disabled", err.Error())
-	//}
-
-	return access, refresh, nil
 }
 
 // / Register a new user and hashed password

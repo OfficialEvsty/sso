@@ -62,6 +62,13 @@ type IPProvider interface {
 // PKCEStorage saves/gets pkce between two endpoints: Authorize-Token
 type PKCEStorage interface {
 	PKCE(ctx context.Context, sessionID string) (*models.PKCE, error)
-	SavePKCE(ctx context.Context, pkce models.PKCE) error
+	SavePKCE(ctx context.Context, pkce *models.PKCE) error
 	RemovePKCE(ctx context.Context, sessionID string) error
+}
+
+// AuthCodeStorage stores auth codes refers to user_id
+type AuthCodeStorage interface {
+	AuthCode(ctx context.Context, code string) (*models.AuthorizationCode, error)
+	SaveAuthCode(ctx context.Context, code *models.AuthorizationCode) error
+	RemoveAuthCode(ctx context.Context, userID int64) error
 }

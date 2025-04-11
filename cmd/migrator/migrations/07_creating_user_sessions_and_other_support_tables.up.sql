@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS redirect_uris (
+CREATE TABLE IF NOT EXISTS session_metadata (
     id BIGSERIAL PRIMARY KEY,
     uri TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -34,6 +34,6 @@ CREATE TABLE IF NOT EXISTS pkces (
 
 CREATE TABLE IF NOT EXISTS authorization_codes (
     code VARCHAR(36) PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL
 );

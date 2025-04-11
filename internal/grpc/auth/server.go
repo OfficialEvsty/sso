@@ -85,13 +85,14 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	}
 	code, err := s.auth.AuthorizeByCurrentSession(ctx, validScope, req.State, pkce)
 	if err != nil {
+		//noInterruptingErrors := []error {storage.InfoUserUnauthenticated, pgx.ErrNoRows} хорошая была задумка, но можно проще
 		if errors.Is(err, storage.ErrNoMetadataContext) {
 			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
 		}
 		if !errors.Is(err, storage.InfoUserUnauthenticated) {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
-		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, req.GetState())
+		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, pkce, req.GetState())
 		return &ssov1.AuthorizeResponse{
 			Response: &ssov1.AuthorizeResponse_AuthRequired{
 				AuthRequired: &ssov1.AuthenticationRequired{

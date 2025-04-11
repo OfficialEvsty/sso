@@ -22,6 +22,10 @@ type Cache struct {
 	useCache              bool
 }
 
+func (c *Cache) GetConnection() *redis.Client {
+	return c.rdb
+}
+
 // NewCache creates new instance of redis client
 func NewCache(conf *config.RedisConfig, useCache bool) (*Cache, error) {
 	get := extensions.GetEnv
