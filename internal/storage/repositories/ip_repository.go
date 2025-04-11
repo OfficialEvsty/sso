@@ -5,16 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"sso/internal/storage"
+	"sso/internal/storage/postgres"
 )
 
 type IPRepository struct {
-	db *pgxpool.Pool
+	db *postgres.ExtPool
 }
 
-// NewIPRepository creates new instance of ip repository
-func NewIPRepository(db *pgxpool.Pool) *IPRepository {
+// NewIPRepository creates new instance of IPRepository
+func NewIPRepository(db *postgres.ExtPool) *IPRepository {
 	return &IPRepository{
 		db: db,
 	}

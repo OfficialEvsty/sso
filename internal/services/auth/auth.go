@@ -41,6 +41,7 @@ type Auth struct {
 	ipProvider       interfaces.IPProvider
 }
 
+// todo implement a facade pattern here
 // New returns a new instance of the Auth service
 func New(
 	log *slog.Logger,
@@ -111,17 +112,22 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 	if err != nil {
 		return uuid.Nil, err
 	}
+	// check is client's ip trusted by user
 	if unknownIPv4 := !slices.Contains(trustedIPs, clientIP); unknownIPv4 {
-		return uuid.Nil, storage.InfoIPChanged
+		return uuid.Nil, storage.InfoUntrustedIPAddress
 	}
 	logger.Info("session approved", sessionID)
 	// updates scope in existing user's session
+	session.Session.Scope = scope
 	sessionUID, err := a.sessionStorage.SaveOAuthSession(ctx, &session.Session)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	logger.Info("session scope changed, ", slog.String("session_id", sessionUID.String()))
 	// saves code challenge as pkce model bound to current session
+	pkce.SessionID = sessionUID.String()
+	pkce.ExpiresAt = time.Now().Add(a.authorizationCodeTTL)
+
 	// generate authorization code and saves it
 	return uuid.New(), nil
 }

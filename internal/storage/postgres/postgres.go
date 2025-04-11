@@ -42,13 +42,18 @@ func (c *config) Init(storagePath string) {
 	c.Database = extensions.GetEnv("DB_NAME", "sso_db")
 }
 
+// ExtPool is a custom pool wrapper
+type ExtPool struct {
+	*pgxpool.Pool
+}
+
 // Storage instance for processing sql queries
 type Storage struct {
 	conf   config
-	dbPool *pgxpool.Pool
+	dbPool *ExtPool
 }
 
-func (s *Storage) GetConnection() *pgxpool.Pool {
+func (s *Storage) GetConnection() *ExtPool {
 	return s.dbPool
 }
 
@@ -59,11 +64,12 @@ func New(storagePath string) (*Storage, error) {
 	conf := config{}
 	conf.Init(storagePath)
 	dbPool, err := pgxpool.New(context.Background(), getConnString(conf))
+	extPool := ExtPool{dbPool}
 	if err != nil {
 		return nil, errors.New("error connecting to database: " + err.Error())
 	}
 
-	return &Storage{conf: conf, dbPool: dbPool}, nil
+	return &Storage{conf: conf, dbPool: &extPool}, nil
 }
 
 // ends database pool connection
@@ -84,8 +90,8 @@ func getConnString(conf config) string {
 	return result
 }
 
-// saveOrUpdate сохраняет или обновляет структуру в таблице и возвращает ID
-func (s *Storage) saveOrUpdate(ctx context.Context, table string, data interface{}, conflictField string) (interface{}, error) {
+// SaveOrUpdate сохраняет или обновляет структуру в таблице и возвращает ID
+func (p *ExtPool) SaveOrUpdate(ctx context.Context, table string, data interface{}, conflictField string) (interface{}, error) {
 	val := reflect.ValueOf(data).Elem()
 	typ := val.Type()
 
@@ -94,7 +100,6 @@ func (s *Storage) saveOrUpdate(ctx context.Context, table string, data interface
 	var values []interface{}
 	var updates []string
 	counter := 1
-
 	// Определяем имя поля ID (может быть не только "id")
 	idField := conflictField
 	for i := 0; i < typ.NumField(); i++ {
@@ -136,7 +141,7 @@ func (s *Storage) saveOrUpdate(ctx context.Context, table string, data interface
 	)
 
 	var id interface{}
-	err := s.dbPool.QueryRow(ctx, query, values...).Scan(&id)
+	err := p.QueryRow(ctx, query, values...).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("failed to save/update record: %w", err)
 	}
@@ -162,7 +167,7 @@ func (s *Storage) CheckClientAndRedirectUri(ctx context.Context, clientId int, r
 func (s *Storage) SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error) {
 	table := "sessions"
 	session.Id = uuid.New()
-	sessionID, err := s.saveOrUpdate(ctx, table, session, "id")
+	sessionID, err := s.dbPool.saveOrUpdate(ctx, table, session, "id")
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -697,9 +702,9 @@ func (s *Storage) ActiveSession(ctx context.Context, sessionID string) (*models.
 	var userSession models.UserSession
 	row := s.dbPool.QueryRow(
 		ctx,
-		`SELECT us.id, us.user_id, s.id, s.client_id, s.ipv4, s.scope, s.created_at, s.expires_at FROM user_sessions AS us 
+		`SELECT us.id, us.user_id, s.id, s.client_id, s.ipv4::text, s.scope, s.created_at, s.expires_at FROM user_sessions AS us 
 		JOIN sessions AS s ON us.session_id = s.id 
-		WHERE us.session_id = $1`,
+		WHERE s.id = $1`,
 		sessionID,
 	)
 	err := row.Scan(

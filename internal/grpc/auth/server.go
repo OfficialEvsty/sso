@@ -89,7 +89,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
 		}
 		if !errors.Is(err, storage.InfoUserUnauthenticated) {
-			return nil, status.Error(codes.Internal, "internal server error while authorization by current session")
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, req.GetState())
 		return &ssov1.AuthorizeResponse{

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS redirect_uris (
 CREATE TABLE IF NOT EXISTS pkces (
     code_challenge TEXT PRIMARY KEY,
     hash_method TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
     session_id VARCHAR(36) NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
@@ -34,5 +35,5 @@ CREATE TABLE IF NOT EXISTS pkces (
 CREATE TABLE IF NOT EXISTS authorization_codes (
     code VARCHAR(36) PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    expires_at TIMESTAMP NOT NULL
+    expires_at TIMESTAMPTZ NOT NULL
 );

@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type AuthServiceDependencies interface {
+	UserStorage() UserStorage
+	UserProvider() UserProvider
+	AppProvider() AppProvider
+}
+
 type UserStorage interface {
 	SaveUser(
 		ctx context.Context,
@@ -50,4 +56,12 @@ type AuthRequestValidator interface {
 type IPProvider interface {
 	SaveTrustedIPv4(ctx context.Context, trustedIP string) error
 	GetAllUserTrustedIPv4(ctx context.Context, userID int64) ([]string, error)
+	CheckUserTrustedIPv4(ctx context.Context, ipv4 string) error
+}
+
+// PKCEStorage saves/gets pkce between two endpoints: Authorize-Token
+type PKCEStorage interface {
+	PKCE(ctx context.Context, sessionID string) (*models.PKCE, error)
+	SavePKCE(ctx context.Context, pkce models.PKCE) error
+	RemovePKCE(ctx context.Context, sessionID string) error
 }
