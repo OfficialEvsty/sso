@@ -16,6 +16,7 @@ type SessionStorage interface {
 	//	device string,
 	//) (sessionID string, err error)
 
+	AuthenticateUserSession(ctx context.Context, sessionID string, userID int64) error
 	SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error)
 	SessionMetadata(ctx context.Context, sessionID string) (*models.SessionMetadata, error)
 	SaveSessionMetadata(ctx context.Context, session *models.SessionMetadata) (int64, error)

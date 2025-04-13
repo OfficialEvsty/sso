@@ -35,5 +35,6 @@ CREATE TABLE IF NOT EXISTS pkces (
 CREATE TABLE IF NOT EXISTS authorization_codes (
     code VARCHAR(36) PRIMARY KEY,
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL
 );

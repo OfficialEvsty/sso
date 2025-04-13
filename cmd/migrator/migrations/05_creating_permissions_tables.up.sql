@@ -20,4 +20,6 @@ CREATE TABLE IF NOT EXISTS app_roles (
 );
 
 INSERT INTO roles (name) VALUES ('admin');
+INSERT INTO roles (name) VALUES ('openid');
+INSERT INTO roles (name) VALUES ('profile');
 /*INSERT INTO user_roles (user_id, role_id) VALUES (1, 1);*/

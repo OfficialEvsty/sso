@@ -92,6 +92,21 @@ func (r *SessionCachedRepository) ActiveSession(ctx context.Context, sessionID s
 	return &userSession, nil
 }
 
+// AuthenticateUserSession authenticate models.OAuthSession when user successfully logged in
+func (r *SessionCachedRepository) AuthenticateUserSession(ctx context.Context, sessionID string, userID int64) error {
+	var id int
+	err := r.db.QueryRow(
+		ctx,
+		`INSERT INTO user_sessions (user_id, session_id) VALUES ($1, $2) RETURNING id`,
+		userID,
+		sessionID,
+	).Scan(&id)
+	if err != nil {
+		return fmt.Errorf("error while inserting user session: %w", err)
+	}
+	return nil
+}
+
 // SaveOAuthSession saves unauthenticated(empty) models.OAuthSession
 func (r *SessionCachedRepository) SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error) {
 	table := "sessions"

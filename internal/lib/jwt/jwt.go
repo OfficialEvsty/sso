@@ -18,6 +18,14 @@ type AccessToken struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// IDToken holds identity data about authenticated user
+type IDToken struct {
+}
+
+// TokenSet holds three tokens: access, id, refresh
+type TokenSet struct {
+}
+
 // GenerateTokenPair generates both tokens access and refresh
 func GenerateTokenPair(
 	user models.User,
@@ -35,6 +43,11 @@ func GenerateTokenPair(
 		return "", "", err
 	}
 	return refresh, access, nil
+}
+
+// GenerateTokenSet generates three tokens: ID, Access, Refresh
+func GenerateTokenSet() {
+
 }
 
 // NewAccessToken Creates auth-token for specified user and app with limited token's duration

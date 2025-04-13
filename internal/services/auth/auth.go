@@ -20,6 +20,7 @@ import (
 	interfaces3 "sso/internal/services/session/interfaces"
 	"sso/internal/storage"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -149,6 +150,7 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 		Code:      uuid.New(),
 		UserID:    session.UserId,
 		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
+		Scope:     scope,
 	}
 	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
 	if err != nil {
@@ -216,7 +218,13 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redir
 }
 
 // TokenArgsValidate validates Token endpoint's args: clientID, redirectUri, state
-func (a *Auth) TokenArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, authCode string, grant string) (err error) {
+func (a *Auth) TokenArgsValidate(
+	ctx context.Context,
+	clientID interface{},
+	redirectUri string,
+	grant string,
+	codeVerifier string,
+) (err error) {
 	// todo продолжить реализацию
 	return nil
 }
@@ -229,13 +237,44 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 	logger := a.log.With(slog.String("op", op))
 	logger.Debug("starts exchanging authorization code on tokens set...")
 	logger.Debug("validates args...")
-	err = a.TokenArgsValidate(ctx, clientID, redirectUri, authCode, grant)
+	// validates args: hash codeVerifier, checks redirect uri, authCode and clientID
+	err = a.TokenArgsValidate(ctx, clientID, redirectUri, grant, codeVerifier)
 	if err != nil {
 		return set, err
 	}
 	logger.Info("provided args valid")
 	var tokens models.OAuthTokenSet
+
 	// todo расписать комменты по сегментам
+	// gets auth code, extract user id
+	code, err := a.authCodeStorage.AuthCode(ctx, authCode)
+	if err != nil {
+		return set, fmt.Errorf("error while receiving auth code: %w", err)
+	}
+
+	// gets user by user id
+	_, err = a.usrProvider.UserById(ctx, code.UserID)
+	if err != nil {
+		if !errors.Is(err, storage.ErrUserNotFound) {
+			return set, fmt.Errorf("error while receiving user: %w", err)
+		}
+		return set, storage.ErrUserNotFound
+	}
+	// checks allowed user's scope
+	allowedScope, err := a.roleProvider.UserRoles(ctx, code.UserID)
+	if err != nil {
+		return set, fmt.Errorf("error while receiving user roles: %w", err)
+	}
+	requestedScope := strings.Split(code.Scope, " ")
+	var resultScopeSlice []string
+	for _, claim := range requestedScope {
+		if slices.Contains(allowedScope, claim) {
+			resultScopeSlice = append(resultScopeSlice, claim)
+		}
+	}
+	resultScope := strings.Join(resultScopeSlice, " ")
+	// generate tokens set (id, access, refresh)
+	// saves refresh token
 	//// Getting current user's roles
 	//roles, err := a.roleProvider.UserRoles(ctx, user.ID)
 	//if err != nil {
@@ -325,7 +364,7 @@ func (a *Auth) Login(
 	if err != nil {
 		return "", err
 	}
-	_, err = a.sessionStorage.Session(ctx, sessionID)
+	session, err := a.sessionStorage.Session(ctx, sessionID)
 	if err != nil {
 		if !errors.Is(err, storage.InfoSessionNotFound) {
 			return "", err
@@ -335,6 +374,10 @@ func (a *Auth) Login(
 	}
 	// todo сессия может быть просрочена, но так как это сессия пустышка, то не пугаемся (но не знаем что делать)
 	// --extract client's IP and saves it as trusted IP address (make it step when exchange auth code on tokens)
+	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
+	if err != nil {
+		return "", err
+	}
 	// gets 'state' parameter from db
 	sessionMetadata, err := a.sessionStorage.SessionMetadata(ctx, sessionID)
 	if err != nil {
@@ -346,10 +389,27 @@ func (a *Auth) Login(
 		Code:      uuid.New(),
 		UserID:    user.ID,
 		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
+		Scope:     session.Scope,
 	}
 	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
 	if err != nil {
 		return "", err
+	}
+	// add current client ip to list of trusted user's ips
+	err = a.ipProvider.CheckUserTrustedIPv4(ctx, clientIP)
+	if err != nil {
+		if !errors.Is(err, storage.InfoTrustedIPNotFound) {
+			return "", fmt.Errorf("error while checking trusted IP: %w", err)
+		}
+	}
+	err = a.ipProvider.SaveTrustedIPv4(ctx, clientIP)
+	if err != nil {
+		return "", err
+	}
+	// authenticated current user's session
+	err = a.sessionStorage.AuthenticateUserSession(ctx, sessionID, user.ID)
+	if err != nil {
+		return "", fmt.Errorf("error while autenticated user's session: %w", err)
 	}
 	// generate redirect uri with code and state as parameters
 	redirectUri += fmt.Sprintf("?code=%s&state=%s", authCode.Code, stateParam)

@@ -4,7 +4,7 @@ import "context"
 
 // RoleProvider gets list of user's role currently assigned on him
 type RoleProvider interface {
-	UserRoles(ctx context.Context, userID int64) (*[]string, error)
+	UserRoles(ctx context.Context, userID int64) ([]string, error)
 	HasRole(ctx context.Context, userID int64, roleID int32) (bool, error)
 }
 
