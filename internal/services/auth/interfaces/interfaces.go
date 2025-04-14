@@ -2,9 +2,7 @@ package interfaces
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5"
 	"sso/internal/domain/models"
-	"time"
 )
 
 type AuthServiceDependencies interface {
@@ -32,17 +30,12 @@ type AppProvider interface {
 	App(ctx context.Context, appId int32) (app models.App, err error)
 }
 
-// TokenCleaner interface for delete refresh tokens
-type TokenCleaner interface {
-	RemoveAllUserTokens(ctx context.Context, userID int64) error
-}
-
 // TokenProvider interface for save/get refresh tokens
-type TokenProvider interface {
-	CachedRefreshToken(ctx context.Context, token string) (refreshToken *models.RefreshToken, err error)
-	CachedSaveRefreshToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error
-	CachedDeleteRefreshToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error)
-}
+//type TokenProvider interface {
+//	CachedRefreshToken(ctx context.Context, token string) (refreshToken *models.RefreshToken, err error)
+//	CachedSaveRefreshToken(ctx context.Context, tx pgx.Tx, userID int64, token string, expiresAt time.Time) error
+//	CachedDeleteRefreshToken(ctx context.Context, token string, isRollback bool) (*pgx.Tx, error)
+//}
 
 // AuthRequestValidator validates request's args in auth service
 // Designed for validation purpose only

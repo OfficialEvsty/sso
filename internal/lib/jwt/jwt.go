@@ -5,13 +5,23 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"os"
 	"sso/internal/domain/models"
 	"sso/internal/storage"
+	"sso/internal/storage/protected/vault"
 	"strings"
 	"time"
 )
 
+// TokenProvider creates different token types
 type TokenProvider struct {
+	sign *vault.SignController
+	TTLs map[string]time.Duration
+}
+
+// NewTokenProvider creates new instance of TokenProvider
+func NewTokenProvider(sign *vault.SignController, ttls map[string]time.Duration) *TokenProvider {
+	return &TokenProvider{sign: sign, TTLs: ttls}
 }
 
 type AccessToken struct {
@@ -23,10 +33,33 @@ type AccessToken struct {
 
 // IDToken holds identity data about authenticated user
 type IDToken struct {
+	Claims    map[string]interface{}
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // TokenSet holds three tokens: access, id, refresh
 type TokenSet struct {
+	Access  AccessToken         `json:"access_token"`
+	ID      IDToken             `json:"id_token"`
+	Refresh models.RefreshToken `json:"refresh_token"`
+}
+
+// MakeIDToken turns user claims to base64 encoded string with encrypted sign
+func (p *TokenProvider) MakeIDToken(user *models.User, aud string) (string, error) {
+	claimsSize := 7
+	claims := make(map[string]interface{}, claimsSize)
+	claims["iss"] = "https://" + os.Getenv("DOMAIN")
+	claims["sub"] = user.ID
+	claims["aud"] = aud
+	claims["iat"] = time.Now().Unix()
+	claims["exp"] = time.Now().Add(p.TTLs["id"]).Unix()
+	claims["email"] = user.Email
+	claims["is_verified"] = user.IsEmailVerified
+	latestKeyVersion, err := p.sign.LatestKeyVersion()
+	if err != nil {
+		return "", err
+	}
+	return p.sign.SignJWT(claims, latestKeyVersion)
 }
 
 // GenerateTokenPair generates both tokens access and refresh
