@@ -2,3 +2,4 @@ pg_notify/
 pgdata/
 database-conf.env
 dump.rdb
+.env

@@ -581,3 +581,7 @@ func (s *Storage) validateRedirectURI(ctx context.Context, redirectUri string) e
 	}
 	return nil
 }
+
+func (s *Storage) TokenArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, authCode string) (err error) {
+	return nil
+}

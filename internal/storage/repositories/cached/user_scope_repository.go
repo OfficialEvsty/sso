@@ -17,7 +17,7 @@ type UserScopeRepository struct {
 }
 
 // NewUserScopeRepository creates a new instance of UserScopeRepository
-func NewUserScopeRepository(cache *redis.Client, db *postgres.ExtPool) *UserScopeRepository {
+func NewUserScopeRepository(db *postgres.ExtPool, cache *redis.Client) *UserScopeRepository {
 	return &UserScopeRepository{cache: cache, db: db}
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"log"
 	"sso/internal/api/mail"
@@ -163,7 +162,7 @@ func (s *serverAPI) Login(
 	if req.GetPassword() == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing password")
 	}
-	access, refresh, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
+	redirectUriWithCode, err := s.auth.Login(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
 		if errors.Is(err, storage.ErrUserNotConfirmedEmail) {
 			return nil, status.Error(codes.PermissionDenied, "user not confirmed email")
@@ -178,17 +177,15 @@ func (s *serverAPI) Login(
 	}
 
 	// sending metadata pairs as headers
-	md := metadata.Pairs("refresh-token", refresh)
-	err = grpc.SendHeader(ctx, md)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to send header metadata")
-	}
+	//md := metadata.Pairs("refresh-token", refresh)
+	//err = grpc.SendHeader(ctx, md)
+	//if err != nil {
+	//	return nil, status.Error(codes.Internal, "failed to send header metadata")
+	//}
 
 	//todo переделать
 	return &ssov1.LoginResponse{
-		RedirectUri: access,
-		Code:        refresh,
-		State:       "",
+		RedirectUri: redirectUriWithCode,
 	}, nil
 }
 

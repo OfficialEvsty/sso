@@ -1,5 +1,32 @@
 # Build and configuration of database image and app Dockerfile in containers
 services:
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    entrypoint: /vault/entrypoint.sh
+    restart: unless-stopped
+    env_file: ".env"
+    environment:
+      VAULT_ADDR: $VAULT_ADDR
+      VAULT_API_ADDR: $VAULT_API_ADDR
+      VAULT_ROLE_ID_FILE: "/run/secrets/role_id"
+      VAULT_SECRET_ID_FILE: "/run/secrets/secret_id"
+    secrets:
+      - role_id
+      - secret_id
+    ports:
+      - ${VAULT_PORT}:${VAULT_PORT}
+    healthcheck:
+      test: wget -q -O - ${VAULT_ADDR}/v1/sys/health || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./internal/storage/protected/vault/entrypoint.sh:/vault/entrypoint.sh # Монтируем скрипт точки входа
+      - ./internal/storage/protected/vault/scripts:/scripts  # Монтируем скрипт инициализации
+    cap_add:
+      - IPC_LOCK
+
   redis:
     image: redis:latest
     container_name: redis_container
@@ -65,8 +92,12 @@ services:
     build:
       context: .
     depends_on:
-      - postgres
-      - migrator
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       SSO_PORT: $SSO_PORT
       DB_USER: $DB_USER
@@ -91,3 +122,8 @@ volumes:
 networks:
   sso-network:
     driver: bridge
+secrets:
+  role_id:
+    file: ./secrets/role_id.txt
+  secret_id:
+    file: ./secrets/secret_id.txt

@@ -232,7 +232,7 @@ func (a *Auth) TokenArgsValidate(
 // Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
 // OAuth2.1 specification method
 // Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
-func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID interface{}) (set *models.OAuthTokenSet, err error) {
+func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID int32) (set *models.OAuthTokenSet, err error) {
 	const op = "auth.Token"
 	logger := a.log.With(slog.String("op", op))
 	logger.Debug("starts exchanging authorization code on tokens set...")
@@ -243,7 +243,7 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 		return set, err
 	}
 	logger.Info("provided args valid")
-	var tokens models.OAuthTokenSet
+	//var tokens models.OAuthTokenSet
 
 	// todo расписать комменты по сегментам
 	// gets auth code, extract user id
@@ -261,7 +261,7 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 		return set, storage.ErrUserNotFound
 	}
 	// checks allowed user's scope
-	allowedScope, err := a.roleProvider.UserRoles(ctx, code.UserID)
+	allowedScope, err := a.roleProvider.AllowedUserScope(ctx, code.UserID, clientID)
 	if err != nil {
 		return set, fmt.Errorf("error while receiving user roles: %w", err)
 	}
@@ -272,7 +272,7 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 			resultScopeSlice = append(resultScopeSlice, claim)
 		}
 	}
-	resultScope := strings.Join(resultScopeSlice, " ")
+	//resultScope := strings.Join(resultScopeSlice, " ")
 	// generate tokens set (id, access, refresh)
 	// saves refresh token
 	//// Getting current user's roles
@@ -569,13 +569,13 @@ func (a *Auth) UpdateTokens(ctx context.Context,
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	roles, err := a.roleProvider.UserRoles(ctx, user.ID)
+	roles, err := a.roleProvider.AllowedUserScope(ctx, user.ID, appID)
 	if err != nil {
 		a.log.Error("error getting user roles", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)
 	}
 
-	refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
+	refresh, access, err = jwt.GenerateTokenPair(user, app, roles, a.tokenTTL)
 	if err != nil {
 		a.log.Error("failed to generate tokens", op, err.Error())
 		return "", "", fmt.Errorf("%s: %w", op, err)

@@ -40,6 +40,7 @@ func New(
 
 	// cashed repositories
 	sessionRepository := cached.NewSessionCachedRepository(storage.GetConnection(), cache.GetConnection())
+	userScopeRepository := cached.NewUserScopeRepository(storage.GetConnection(), cache.GetConnection())
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +52,7 @@ func New(
 		storage,
 		cashedStorage,
 		sessionRepository,
-		storage,
+		userScopeRepository,
 		tokenTTL,
 		refreshTTL,
 		sessionTTL,
@@ -70,7 +71,7 @@ func New(
 
 	accessService := access.New(
 		log,
-		storage,
+		userScopeRepository,
 		storage,
 		storage,
 		storage,
