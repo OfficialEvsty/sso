@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+type TokenProvider struct {
+}
+
 type AccessToken struct {
 	UserID    int64     `json:"user_id"`
 	AppID     int32     `json:"app_id"`

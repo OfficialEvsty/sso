@@ -1,8 +1,9 @@
-package vault
+package protected
 
 import (
 	"github.com/hashicorp/vault/api"
 	"os"
+	"sso/internal/lib/extensions"
 )
 
 // appRoleLogin holds authenticated data to provide accessed connection to Vault client
@@ -37,6 +38,29 @@ func NewVaultClient() (*Vault, error) {
 }
 
 // AuthUser authenticated service-user as Vault client
-func (v *Vault) AuthUser() error {
+func (v *Vault) AuthUser() (string, error) {
+	request := v.Client.NewRequest("POST", "/v1/auth/approle/login")
+	login := appRoleLogin{
+		SecretID: extensions.GetTextFromFile("./secrets/secret_id.txt"),
+		RoleID:   extensions.GetTextFromFile("./secrets/role_id.txt"),
+	}
 
+	// Sets login into request's body
+	if err := request.SetJSONBody(login); err != nil {
+		return "", err
+	}
+
+	// step: make the request
+	resp, err := v.Client.RawRequest(request)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// step: parse and return auth
+	secret, err := api.ParseSecret(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return secret.Auth.ClientToken, nil
 }

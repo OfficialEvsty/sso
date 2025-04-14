@@ -33,5 +33,12 @@ vault write -f -field=secret_id auth/approle/role/my-app-role/secret-id > /secre
 
 echo "Vault AppRole setup complete!"
 
+vault secrets enable transit
+vault write transit/keys/jwt_keys \
+    type=rsa-2048 \
+    allowed_uses=sign,verify \
+    exportable=true
+
+echo "Secrets enabled and JWT keys created"
 # Оставляем контейнер работающим
 tail -f /var/log/vault.log
