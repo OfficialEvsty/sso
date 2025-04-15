@@ -2,6 +2,7 @@ package models
 
 import (
 	uu "github.com/google/uuid"
+	"net"
 	"time"
 )
 
@@ -9,7 +10,7 @@ import (
 type OAuthSession struct {
 	Id        uu.UUID   `json:"id" db:"id"`
 	ClientId  int       `json:"client_id" db:"client_id"`
-	Ip        string    `json:"ip" db:"ipv4"`
+	Ip        net.IP    `json:"ip" db:"ipv4"`
 	Scope     string    `json:"scope" db:"scope"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`

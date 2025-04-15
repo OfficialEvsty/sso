@@ -68,7 +68,7 @@ func (r *SessionCachedRepository) ActiveSession(ctx context.Context, sessionID s
 	var userSession models.UserSession
 	row := r.db.QueryRow(
 		ctx,
-		`SELECT us.id, us.user_id, s.id, s.client_id, s.ipv4::text, s.scope, s.created_at, s.expires_at FROM user_sessions AS us 
+		`SELECT us.id, us.user_id, s.id, s.client_id, s.ipv4, s.scope, s.created_at, s.expires_at FROM user_sessions AS us 
 		JOIN sessions AS s ON us.session_id = s.id 
 		WHERE s.id = $1`,
 		sessionID,
@@ -160,4 +160,13 @@ func (r *SessionCachedRepository) RemoveSession(ctx context.Context, sessionID s
 		}
 	}
 	return nil
+}
+
+// RemoveAllUserSessions clears all sessions bound to userId
+func (r *SessionCachedRepository) RemoveAllUserSessions(ctx context.Context, userID int64) {
+	_ = r.db.QueryRow(
+		ctx,
+		`DELETE FROM sessions WHERE user_id = $1`,
+		userID,
+	)
 }

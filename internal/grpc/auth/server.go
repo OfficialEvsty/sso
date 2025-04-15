@@ -82,7 +82,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	if err != nil {
 		return nil, err
 	}
-	code, err := s.auth.AuthorizeByCurrentSession(ctx, validScope, req.State, pkce)
+	code, err := s.auth.AuthorizeByCurrentSession(ctx, validScope, pkce)
 	if err != nil {
 		//noInterruptingErrors := []error {storage.InfoUserUnauthenticated, pgx.ErrNoRows} хорошая была задумка, но можно проще
 		if errors.Is(err, storage.ErrNoMetadataContext) {
@@ -91,6 +91,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 		if !errors.Is(err, storage.InfoUserUnauthenticated) {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+		// todo delete all user's sessions when redirect on login form
 		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, pkce, req.GetState())
 		return &ssov1.AuthorizeResponse{
 			Response: &ssov1.AuthorizeResponse_AuthRequired{

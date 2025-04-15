@@ -21,12 +21,13 @@ func NewIPRepository(db *postgres.ExtPool) *IPRepository {
 }
 
 // SaveTrustedIPv4 saves user's ip in db
-func (r *IPRepository) SaveTrustedIPv4(ctx context.Context, trustedIP string) error {
+func (r *IPRepository) SaveTrustedIPv4(ctx context.Context, trustedIP string, userID int64) error {
 	var id interface{}
 	err := r.db.QueryRow(
 		ctx,
 		`INSERT INTO user_trusted_ips (ipv4, user_id) VALUES ($1, $2) RETURNING id`,
 		trustedIP,
+		userID,
 	).Scan(&id)
 	if err != nil {
 		return err

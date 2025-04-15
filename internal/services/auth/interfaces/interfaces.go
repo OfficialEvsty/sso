@@ -47,7 +47,7 @@ type AuthRequestValidator interface {
 
 // IPProvider saves/gets user's trusted ip via login
 type IPProvider interface {
-	SaveTrustedIPv4(ctx context.Context, trustedIP string) error
+	SaveTrustedIPv4(ctx context.Context, trustedIP string, userID int64) error
 	GetAllUserTrustedIPv4(ctx context.Context, userID int64) ([]string, error)
 	CheckUserTrustedIPv4(ctx context.Context, ipv4 string) error
 }

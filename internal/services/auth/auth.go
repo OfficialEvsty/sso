@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"sso/internal/domain/models"
@@ -91,7 +92,7 @@ func (a *Auth) AuthorizeArgsValidate(ctx context.Context, clientID interface{}, 
 
 // AuthorizeByCurrentSession try to get user's session from metadata and authorize user if it valid
 // If current session are empty or not valid throws error
-func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, state string, pkce *models.PKCE) (uuid.UUID, error) {
+func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, pkce *models.PKCE) (uuid.UUID, error) {
 	const op = "auth.AuthorizeByCurrentSession"
 	logger := a.log.With(slog.String("op", op))
 	sessionID, err := utilities.GetUserSession(ctx, logger)
@@ -107,10 +108,15 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 	// checks if session valid and stores in user_sessions
 	session, err := a.sessionStorage.ActiveSession(ctx, sessionID)
 	if err != nil {
+		if sessionRemovingErr := a.sessionStorage.RemoveSession(ctx, sessionID); sessionRemovingErr != nil {
+			return uuid.Nil, fmt.Errorf("error while session must be cleaned: %w", err)
+		}
+		//logger.Info("invalid session cleaned", slog.String("sessionID", sessionID))
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, err
 		}
 		// make a handler for this exception
+		logger.Info("user's session not valid")
 		return uuid.Nil, storage.InfoUserUnauthenticated
 	}
 	if sessionExpires := time.Now().Unix() > session.Session.ExpiresAt.Unix(); sessionExpires {
@@ -127,6 +133,7 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, stat
 	}
 	// check is client's ip trusted by user
 	if unknownIPv4 := !slices.Contains(trustedIPs, clientIP); unknownIPv4 {
+		logger.Info("user trying to logged in via untrusted ip address, redirect on login form...")
 		return uuid.Nil, storage.InfoUntrustedIPAddress
 	}
 	logger.Info("session approved", sessionID)
@@ -177,7 +184,7 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redir
 	// create session object and saves it
 	session := &models.OAuthSession{
 		ClientId:  convClientID,
-		Ip:        clientIP,
+		Ip:        net.ParseIP(clientIP),
 		Scope:     scope,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(a.sessionTTL),
@@ -401,7 +408,7 @@ func (a *Auth) Login(
 			return "", fmt.Errorf("error while checking trusted IP: %w", err)
 		}
 	}
-	err = a.ipProvider.SaveTrustedIPv4(ctx, clientIP)
+	err = a.ipProvider.SaveTrustedIPv4(ctx, clientIP, user.ID)
 	if err != nil {
 		return "", err
 	}
