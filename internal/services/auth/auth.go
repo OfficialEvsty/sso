@@ -13,7 +13,6 @@ import (
 	"os"
 	"slices"
 	"sso/internal/domain/models"
-	"sso/internal/lib/jwt"
 	"sso/internal/lib/utilities"
 	interfaces2 "sso/internal/services/access/interfaces"
 	"sso/internal/services/auth/interfaces"
@@ -29,7 +28,7 @@ type Auth struct {
 	usrStorage           interfaces.UserStorage
 	usrProvider          interfaces.UserProvider
 	appProvider          interfaces.AppProvider
-	tokenCleaner         interfaces.TokenCleaner
+	tokenStorage         interfaces.TokenStorage
 	tokenProvider        interfaces.TokenProvider
 	roleProvider         interfaces2.RoleProvider
 	sessionStorage       interfaces3.SessionStorage
@@ -51,7 +50,7 @@ func New(
 	userStorage interfaces.UserStorage,
 	userProvider interfaces.UserProvider,
 	appProvider interfaces.AppProvider,
-	tokenCleaner interfaces.TokenCleaner,
+	tokenStorage interfaces.TokenStorage,
 	tokenProvider interfaces.TokenProvider,
 	sessionStorage interfaces3.SessionStorage,
 	roleProvider interfaces2.RoleProvider,
@@ -69,7 +68,7 @@ func New(
 		usrStorage:           userStorage,
 		usrProvider:          userProvider,
 		appProvider:          appProvider,
-		tokenCleaner:         tokenCleaner,
+		tokenStorage:         tokenStorage,
 		tokenProvider:        tokenProvider,
 		sessionStorage:       sessionStorage,
 		roleProvider:         roleProvider,
@@ -516,129 +515,129 @@ func (a *Auth) IsAdmin(
 // ValidateRefreshToken validate refresh token
 //
 // Returns user's ID if token valid, else 0
-func (a *Auth) ValidateRefreshToken(ctx context.Context, oldRefreshToken string) (int64, error) {
-	const op = "auth.ValidateRefreshToken"
-
-	// get stored refresh token to validate received user's token
-	storedOldRefreshToken, err := a.tokenProvider.CachedRefreshToken(
-		ctx,
-		oldRefreshToken,
-	)
-	if err != nil {
-		a.log.Error("failed to get refresh token ", err.Error(), op, oldRefreshToken)
-		return 0, storage.ErrTokenInvalid
-	}
-
-	// if refresh token expired
-	if storedOldRefreshToken.ExpiresAt.Unix() < time.Now().Unix() {
-		a.log.Info("refresh token expired", op, oldRefreshToken)
-		_, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, false)
-		if err != nil {
-			return 0, fmt.Errorf("%s: %w", op, err)
-		}
-		return 0, storage.ErrTokenExpired
-	}
-	return storedOldRefreshToken.UserID, nil
-}
+//func (a *Auth) ValidateRefreshToken(ctx context.Context, oldRefreshToken string) (int64, error) {
+//	const op = "auth.ValidateRefreshToken"
+//
+//	// get stored refresh token to validate received user's token
+//	storedOldRefreshToken, err := a.tokenProvider.CachedRefreshToken(
+//		ctx,
+//		oldRefreshToken,
+//	)
+//	if err != nil {
+//		a.log.Error("failed to get refresh token ", err.Error(), op, oldRefreshToken)
+//		return 0, storage.ErrTokenInvalid
+//	}
+//
+//	// if refresh token expired
+//	if storedOldRefreshToken.ExpiresAt.Unix() < time.Now().Unix() {
+//		a.log.Info("refresh token expired", op, oldRefreshToken)
+//		_, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, false)
+//		if err != nil {
+//			return 0, fmt.Errorf("%s: %w", op, err)
+//		}
+//		return 0, storage.ErrTokenExpired
+//	}
+//	return storedOldRefreshToken.UserID, nil
+//}
 
 // UpdateTokens updates expired access token and refresh token (if it not yet expired)
 // Deletes old entity of refresh token in database and writes new one
 // Returns both tokens access and refresh to user
-func (a *Auth) UpdateTokens(ctx context.Context,
-	oldRefreshToken string,
-	userID int64,
-	appID int32,
-) (access string, refresh string, err error) {
-	const op = "auth.UpdateTokens"
+//func (a *Auth) UpdateTokens(ctx context.Context,
+//	oldRefreshToken string,
+//	userID int64,
+//	appID int32,
+//) (access string, refresh string, err error) {
+//	const op = "auth.UpdateTokens"
+//
+//	// Gets user from storage
+//
+//	user, err := a.usrProvider.UserById(ctx, userID)
+//	if err != nil {
+//		if errors.Is(err, storage.ErrUserNotFound) {
+//			a.log.Warn("user not found", err.Error())
+//		}
+//		return "", "", fmt.Errorf("%s: %w", op, err)
+//	}
+//
+//	app, err := a.appProvider.App(ctx, appID)
+//	if err != nil {
+//		if errors.Is(err, storage.ErrAppNotFound) {
+//			a.log.Warn("app not found", err.Error())
+//		}
+//		return "", "", fmt.Errorf("%s: %w", op, err)
+//	}
+//
+//	roles, err := a.roleProvider.AllowedUserScope(ctx, user.ID, appID)
+//	if err != nil {
+//		a.log.Error("error getting user roles", op, err.Error())
+//		return "", "", fmt.Errorf("%s: %w", op, err)
+//	}
+//
+//	refresh, access, err = jwt.GenerateTokenPair(user, app, roles, a.tokenTTL)
+//	if err != nil {
+//		a.log.Error("failed to generate tokens", op, err.Error())
+//		return "", "", fmt.Errorf("%s: %w", op, err)
+//	}
+//	tx, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, true)
+//
+//	if err != nil {
+//		if !errors.Is(err, storage.InfoCacheDisabled) {
+//			a.log.Error("failed to remove old refresh token", op, err.Error())
+//			return "", "", fmt.Errorf("%s: %w", op, err)
+//		}
+//	}
+//
+//	timeToExpire := time.Now().Add(a.refreshTTL)
+//	var txSafe pgx.Tx
+//	if tx == nil {
+//		txSafe = nil
+//	} else {
+//		txSafe = *tx
+//	}
+//	err = a.tokenProvider.CachedSaveRefreshToken(ctx, txSafe, user.ID, refresh, timeToExpire)
+//	if err != nil {
+//		if !errors.Is(err, storage.InfoCacheDisabled) {
+//			a.log.Error("failed to save refresh token", op, err.Error())
+//			return "", "", fmt.Errorf("%s: %w", op, err)
+//		}
+//	}
+//
+//	//_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
+//	//if err != nil {
+//	//	if !(errors.Is(err, storage.InfoCacheDisabled) || errors.Is(err, storage.InfoSessionsDisabled)) {
+//	//		a.log.Error("failed to save session", err.Error())
+//	//		return "", "", fmt.Errorf("%s: %w", op, err)
+//	//	}
+//	//}
+//
+//	return access, refresh, nil
+//}
 
-	// Gets user from storage
-
-	user, err := a.usrProvider.UserById(ctx, userID)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			a.log.Warn("user not found", err.Error())
-		}
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	app, err := a.appProvider.App(ctx, appID)
-	if err != nil {
-		if errors.Is(err, storage.ErrAppNotFound) {
-			a.log.Warn("app not found", err.Error())
-		}
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	roles, err := a.roleProvider.AllowedUserScope(ctx, user.ID, appID)
-	if err != nil {
-		a.log.Error("error getting user roles", op, err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
-
-	refresh, access, err = jwt.GenerateTokenPair(user, app, roles, a.tokenTTL)
-	if err != nil {
-		a.log.Error("failed to generate tokens", op, err.Error())
-		return "", "", fmt.Errorf("%s: %w", op, err)
-	}
-	tx, err := a.tokenProvider.CachedDeleteRefreshToken(ctx, oldRefreshToken, true)
-
-	if err != nil {
-		if !errors.Is(err, storage.InfoCacheDisabled) {
-			a.log.Error("failed to remove old refresh token", op, err.Error())
-			return "", "", fmt.Errorf("%s: %w", op, err)
-		}
-	}
-
-	timeToExpire := time.Now().Add(a.refreshTTL)
-	var txSafe pgx.Tx
-	if tx == nil {
-		txSafe = nil
-	} else {
-		txSafe = *tx
-	}
-	err = a.tokenProvider.CachedSaveRefreshToken(ctx, txSafe, user.ID, refresh, timeToExpire)
-	if err != nil {
-		if !errors.Is(err, storage.InfoCacheDisabled) {
-			a.log.Error("failed to save refresh token", op, err.Error())
-			return "", "", fmt.Errorf("%s: %w", op, err)
-		}
-	}
-
-	//_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
-	//if err != nil {
-	//	if !(errors.Is(err, storage.InfoCacheDisabled) || errors.Is(err, storage.InfoSessionsDisabled)) {
-	//		a.log.Error("failed to save session", err.Error())
-	//		return "", "", fmt.Errorf("%s: %w", op, err)
-	//	}
-	//}
-
-	return access, refresh, nil
-}
-
-// CompleteLogout logout user and cleans held cache and tokens stored in database
-func (a *Auth) CompleteLogout(ctx context.Context, userID int64, token string) error {
-	const op = "auth.CompleteLogout"
-
-	_, err := a.usrProvider.UserById(ctx, userID)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			a.log.Error("user not found", op, userID, err.Error())
-			return storage.ErrUserNotFound
-		}
-		a.log.Error("failed to get user", op, userID, err.Error())
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	_, err = a.tokenProvider.CachedDeleteRefreshToken(ctx, token, false)
-	if err != nil {
-		a.log.Error("failed to remove refresh token", op, userID, err.Error())
-	}
-
-	err = a.tokenCleaner.RemoveAllUserTokens(ctx, userID)
-	if err != nil {
-		a.log.Error("failed to remove user tokens", op, userID, err.Error())
-	}
-
-	a.log.Info("successfully logged out", op, userID)
-	return nil
-}
+//// CompleteLogout logout user and cleans held cache and tokens stored in database
+//func (a *Auth) CompleteLogout(ctx context.Context, userID int64, token string) error {
+//	const op = "auth.CompleteLogout"
+//
+//	_, err := a.usrProvider.UserById(ctx, userID)
+//	if err != nil {
+//		if errors.Is(err, storage.ErrUserNotFound) {
+//			a.log.Error("user not found", op, userID, err.Error())
+//			return storage.ErrUserNotFound
+//		}
+//		a.log.Error("failed to get user", op, userID, err.Error())
+//		return fmt.Errorf("%s: %w", op, err)
+//	}
+//
+//	_, err = a.tokenProvider.CachedDeleteRefreshToken(ctx, token, false)
+//	if err != nil {
+//		a.log.Error("failed to remove refresh token", op, userID, err.Error())
+//	}
+//
+//	err = a.tokenCleaner.RemoveAllUserTokens(ctx, userID)
+//	if err != nil {
+//		a.log.Error("failed to remove user tokens", op, userID, err.Error())
+//	}
+//
+//	a.log.Info("successfully logged out", op, userID)
+//	return nil
+//}

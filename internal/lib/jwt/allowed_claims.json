@@ -1,0 +1,18 @@
+{
+  "0": [
+    "iss",
+    "aud",
+    "sub",
+    "iat",
+    "exp",
+    "email",
+    "is_verified"
+  ],
+  "1": [
+    "iss",
+    "aud",
+    "sub",
+    "exp",
+    "scope"
+  ]
+}

@@ -17,3 +17,22 @@ redis:
   session_ttl: 15m
   email_auth_token_ttl: 24h
   password_reset_token_ttl: 1h
+jwt:
+  token_ttls:
+    0: 1h
+    1: 30m
+  allowed_claims:
+    0:
+      - iss
+      - aud
+      - iat
+      - exp
+      - sub
+      - email
+      - is_verified
+    1:
+      - iss
+      - aud
+      - exp
+      - sub
+      - scope

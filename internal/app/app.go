@@ -5,12 +5,14 @@ import (
 	"sso/internal/api/mail"
 	grpcapp "sso/internal/app/grpc"
 	"sso/internal/config"
+	"sso/internal/lib/jwt"
 	"sso/internal/services/access"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
 	"sso/internal/services/verification"
-	"sso/internal/storage/cached_postgres"
 	"sso/internal/storage/postgres"
+	"sso/internal/storage/protected"
+	vault2 "sso/internal/storage/protected/vault"
 	"sso/internal/storage/redis"
 	"sso/internal/storage/repositories"
 	"sso/internal/storage/repositories/cached"
@@ -25,6 +27,7 @@ func New(
 	log *slog.Logger,
 	grpcPort int,
 	redisConfig config.RedisConfig,
+	tokenConfig config.TokenConfig,
 	storagePath string,
 	sessionEnabled bool,
 	useCache bool,
@@ -35,8 +38,12 @@ func New(
 ) *App {
 	storage, err := postgres.New(storagePath)
 	cache, err := redis.NewCache(&redisConfig, useCache)
-	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
+	//	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
 	mailService, err := mail.NewMailClient(log)
+
+	vault, err := protected.NewVaultClient()
+	vaultStorage := vault2.NewSignController(vault)
+	tokenProvider := jwt.NewTokenProvider(vaultStorage, tokenConfig)
 
 	// cashed repositories
 	sessionRepository := cached.NewSessionCachedRepository(storage.GetConnection(), cache.GetConnection())
@@ -49,8 +56,8 @@ func New(
 		storage,
 		storage,
 		storage,
-		storage,
-		cashedStorage,
+		cached.NewTokenCachedRepository(storage.GetConnection(), cache.GetConnection()),
+		tokenProvider,
 		sessionRepository,
 		userScopeRepository,
 		tokenTTL,

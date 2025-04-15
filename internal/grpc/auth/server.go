@@ -265,45 +265,47 @@ func (s *serverAPI) IsAdmin(
 	return &ssov1.IsAdminResponse{IsAdmin: isAdmin}, nil
 }
 
+// todo переделать
 // RefreshToken handler updates user's tokens by receiving refresh token from user
 func (s *serverAPI) RefreshToken(
 	ctx context.Context,
 	req *ssov1.RefreshTokenRequest,
 ) (*ssov1.RefreshTokenResponse, error) {
 	userToken := req.GetRefreshToken()
-	appID := req.GetAppId()
+	//appID := req.GetAppId()
 	if userToken == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing refresh token")
 	}
-	userID, err := s.auth.ValidateRefreshToken(ctx, userToken)
+	//userID, err := s.auth.ValidateRefreshToken(ctx, userToken)
+	//
+	//if err != nil {
+	//	if errors.Is(err, storage.ErrTokenExpired) {
+	//		return nil, status.Error(codes.FailedPrecondition, "refresh token expired")
+	//	}
+	//	if errors.Is(err, storage.ErrTokenInvalid) {
+	//		return nil, status.Error(codes.FailedPrecondition, "invalid refresh token")
+	//	}
+	//	if errors.Is(err, storage.ErrUserNotFound) {
+	//		return nil, status.Error(codes.NotFound, "user not found")
+	//	}
+	//	return nil, status.Error(codes.Internal, "internal server error")
+	//}
 
-	if err != nil {
-		if errors.Is(err, storage.ErrTokenExpired) {
-			return nil, status.Error(codes.FailedPrecondition, "refresh token expired")
-		}
-		if errors.Is(err, storage.ErrTokenInvalid) {
-			return nil, status.Error(codes.FailedPrecondition, "invalid refresh token")
-		}
-		if errors.Is(err, storage.ErrUserNotFound) {
-			return nil, status.Error(codes.NotFound, "user not found")
-		}
-		return nil, status.Error(codes.Internal, "internal server error")
-	}
-
-	access, refresh, err := s.auth.UpdateTokens(ctx, userToken, userID, appID)
-	if err != nil {
-		if errors.Is(err, storage.ErrAppNotFound) {
-			return nil, status.Error(codes.NotFound, "app not found")
-		}
-		return nil, status.Error(codes.Internal, "internal server error")
-	}
+	//access, refresh, err := s.auth.UpdateTokens(ctx, userToken, userID, appID)
+	//if err != nil {
+	//	if errors.Is(err, storage.ErrAppNotFound) {
+	//		return nil, status.Error(codes.NotFound, "app not found")
+	//	}
+	//	return nil, status.Error(codes.Internal, "internal server error")
+	//}
 
 	return &ssov1.RefreshTokenResponse{
-		AccessToken:  access,
-		RefreshToken: refresh,
+		AccessToken:  "access",
+		RefreshToken: "refresh",
 	}, nil
 }
 
+// todo переделать
 // LogoutAll endpoint cleans all cached and stored in db tokens
 func (s *serverAPI) LogoutAll(
 	ctx context.Context,
@@ -313,15 +315,15 @@ func (s *serverAPI) LogoutAll(
 	if userID <= 0 {
 		return nil, status.Error(codes.InvalidArgument, "invalid user id")
 	}
-	token := req.GetToken()
-
-	err := s.auth.CompleteLogout(ctx, userID, token)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserNotFound) {
-			return nil, status.Error(codes.NotFound, "user not found")
-		}
-		return nil, status.Error(codes.Internal, "internal server error")
-	}
+	//token := req.GetToken()
+	//
+	//err := s.auth.CompleteLogout(ctx, userID, token)
+	//if err != nil {
+	//	if errors.Is(err, storage.ErrUserNotFound) {
+	//		return nil, status.Error(codes.NotFound, "user not found")
+	//	}
+	//	return nil, status.Error(codes.Internal, "internal server error")
+	//}
 	return &ssov1.LogoutAllResponse{
 		Message: "user successfully logged out",
 	}, nil

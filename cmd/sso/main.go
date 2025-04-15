@@ -30,6 +30,7 @@ func main() {
 		log,
 		cfg.GRPC.Port,
 		cfg.Redis,
+		cfg.JWT,
 		cfg.StoragePath,
 		cfg.SessionEnabled,
 		cfg.UseCache,

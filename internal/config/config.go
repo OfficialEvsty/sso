@@ -18,6 +18,7 @@ type Config struct {
 	UseCache             bool          `yaml:"use_cache"`
 	GRPC                 GRPCConfig    `yaml:"grpc" env-required:"true"`
 	Redis                RedisConfig   `yaml:"redis" env-required:"true"`
+	JWT                  TokenConfig   `yaml:"jwt" env-required:"true"`
 }
 
 type GRPCConfig struct {
@@ -33,6 +34,11 @@ type RedisConfig struct {
 	SessionTTL            time.Duration `yaml:"session_ttl" env-required:"true"`
 	EmailAuthTokenTTL     time.Duration `yaml:"email_auth_token_ttl" env-default:"24h"`
 	PasswordResetTokenTTL time.Duration `yaml:"password_reset_token_ttl" env-required:"true"`
+}
+
+type TokenConfig struct {
+	TTLs          map[TokenType]time.Duration `yaml:"token_ttls"`
+	AllowedClaims map[TokenType][]string      `yaml:"allowed_claims"`
 }
 
 func MustLoad() *Config {

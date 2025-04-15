@@ -1,6 +1,8 @@
 package models
 
-import "time"
+import (
+	"time"
+)
 
 // Refresh token's model
 type RefreshToken struct {

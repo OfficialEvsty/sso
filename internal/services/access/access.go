@@ -3,7 +3,6 @@ package access
 import (
 	"context"
 	"log/slog"
-	"sso/internal/lib/jwt"
 	interfaces2 "sso/internal/services/access/interfaces"
 	"sso/internal/services/auth/interfaces"
 	"sso/internal/storage"
@@ -27,32 +26,33 @@ func New(log *slog.Logger, roleProvider interfaces2.RoleProvider, roleController
 	}
 }
 
+// todo переделать
 func (a *Access) isAdminValidate(ctx context.Context, appID int32, token string) (bool, error) {
 	const op = "access.isAdminValidate"
-	app, err := a.appProvider.App(ctx, appID)
-	if err != nil {
-		return false, err
-	}
+	//app, err := a.appProvider.App(ctx, appID)
+	//if err != nil {
+	//	return false, err
+	//}
+	//
+	//tokenData, err := jwt.ValidateAccessToken(token, app.Secret)
+	//
+	//if err != nil {
+	//	a.log.Error("error validating a token", op, err.Error())
+	//	return false, err
+	//}
+	//
+	//if tokenData == nil {
+	//	a.log.Error("token is empty", op, tokenData)
+	//	return false, nil
+	//}
+	//
+	//isAdmin, err := a.userProvider.IsAdmin(ctx, tokenData.UserID)
+	//if err != nil {
+	//	a.log.Error("error checking is user admin", op, tokenData)
+	//	return false, err
+	//}
 
-	tokenData, err := jwt.ValidateAccessToken(token, app.Secret)
-
-	if err != nil {
-		a.log.Error("error validating a token", op, err.Error())
-		return false, err
-	}
-
-	if tokenData == nil {
-		a.log.Error("token is empty", op, tokenData)
-		return false, nil
-	}
-
-	isAdmin, err := a.userProvider.IsAdmin(ctx, tokenData.UserID)
-	if err != nil {
-		a.log.Error("error checking is user admin", op, tokenData)
-		return false, err
-	}
-
-	return isAdmin, nil
+	return false, nil
 }
 
 // AssignRoleToUser adds user role
