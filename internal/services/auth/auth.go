@@ -13,7 +13,9 @@ import (
 	"net"
 	"os"
 	"slices"
+	"sso/internal/app/interceptors"
 	"sso/internal/domain/models"
+	"sso/internal/lib/jwt/tokens"
 	"sso/internal/lib/utilities"
 	interfaces2 "sso/internal/services/access/interfaces"
 	"sso/internal/services/auth/interfaces"
@@ -132,7 +134,10 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, pkce
 		return uuid.Nil, err
 	}
 	// check is client's ip trusted by user
-	if unknownIPv4 := !slices.Contains(trustedIPs, clientIP); unknownIPv4 {
+	// converting []net.IP to []string due utility Mapper
+	if unknownIPv4 := !slices.Contains(utilities.Map(trustedIPs, func(ip net.IP) string {
+		return ip.String()
+	}), clientIP); unknownIPv4 {
 		logger.Info("user trying to logged in via untrusted ip address, redirect on login form...")
 		return uuid.Nil, storage.InfoUntrustedIPAddress
 	}
@@ -157,6 +162,10 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, pkce
 		UserID:    session.UserId,
 		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
 		Scope:     scope,
+	}
+	err = a.authCodeStorage.RemoveAuthCode(ctx, session.UserId)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("error while removing auth code: %w", err)
 	}
 	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
 	if err != nil {
@@ -183,6 +192,7 @@ func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redir
 	}
 	// create session object and saves it
 	session := &models.OAuthSession{
+		Id:        uuid.New(),
 		ClientId:  convClientID,
 		Ip:        net.ParseIP(clientIP),
 		Scope:     scope,
@@ -228,38 +238,40 @@ func (a *Auth) TokenArgsValidate(
 	ctx context.Context,
 	clientID interface{},
 	redirectUri string,
-	grant string,
 	codeVerifier string,
+	sessionID string,
+	grant string,
 ) (err error) {
-	// todo продолжить реализацию
-	return nil
+	return a.requestValidator.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID, grant)
 }
 
 // Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
 // OAuth2.1 specification method
 // Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
-func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID int32) (set *models.OAuthTokenSet, err error) {
+func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID string) (set *tokens.TokenSet, err error) {
 	const op = "auth.Token"
+	aud := "currently unimplemented"
 	logger := a.log.With(slog.String("op", op))
 	logger.Debug("starts exchanging authorization code on tokens set...")
 	logger.Debug("validates args...")
+	sessionID, err := utilities.GetUserSession(ctx, logger)
+	if err != nil {
+		return nil, err
+	}
 	// validates args: hash codeVerifier, checks redirect uri, authCode and clientID
-	err = a.TokenArgsValidate(ctx, clientID, redirectUri, grant, codeVerifier)
+	err = a.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID, grant)
 	if err != nil {
 		return set, err
 	}
-	logger.Info("provided args valid")
-	//var tokens models.OAuthTokenSet
-
-	// todo расписать комменты по сегментам
+	logger.Debug("provided args valid")
 	// gets auth code, extract user id
 	code, err := a.authCodeStorage.AuthCode(ctx, authCode)
 	if err != nil {
 		return set, fmt.Errorf("error while receiving auth code: %w", err)
 	}
-
+	logger.Debug("received auth code")
 	// gets user by user id
-	_, err = a.usrProvider.UserById(ctx, code.UserID)
+	user, err := a.usrProvider.UserById(ctx, code.UserID)
 	if err != nil {
 		if !errors.Is(err, storage.ErrUserNotFound) {
 			return set, fmt.Errorf("error while receiving user: %w", err)
@@ -267,10 +279,16 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 		return set, storage.ErrUserNotFound
 	}
 	// checks allowed user's scope
-	allowedScope, err := a.roleProvider.AllowedUserScope(ctx, code.UserID, clientID)
+	convClientID, err := strconv.Atoi(clientID)
+	if err != nil {
+		return nil, err
+	}
+
+	allowedScope, err := a.roleProvider.AllowedUserScope(ctx, code.UserID, convClientID)
 	if err != nil {
 		return set, fmt.Errorf("error while receiving user roles: %w", err)
 	}
+	logger.Debug("user's allowed scope: %w", strings.Join(allowedScope, " "))
 	requestedScope := strings.Split(code.Scope, " ")
 	var resultScopeSlice []string
 	for _, claim := range requestedScope {
@@ -278,48 +296,35 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 			resultScopeSlice = append(resultScopeSlice, claim)
 		}
 	}
-	//resultScope := strings.Join(resultScopeSlice, " ")
+	resultScope := strings.Join(resultScopeSlice, " ")
 	// generate tokens set (id, access, refresh)
+	idToken, err := a.tokenProvider.MakeIDToken(&user, aud)
+	if err != nil {
+		return nil, fmt.Errorf("error generating id token: %w", err)
+	}
+	logger.Debug("idToken generated")
+	acsToken, err := a.tokenProvider.MakeAccessToken(&user, aud, resultScope)
+	if err != nil {
+		return nil, fmt.Errorf("error generating access token: %w", err)
+	}
+	logger.Debug("access token generated")
+	refresh, err := a.tokenProvider.MakeRefreshToken(user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("error generating refresh token: %w", err)
+	}
+	tokenSet := a.tokenProvider.MakeTokenSet(idToken, acsToken, refresh)
 	// saves refresh token
-	//// Getting current user's roles
-	//roles, err := a.roleProvider.UserRoles(ctx, user.ID)
-	//if err != nil {
-	//	a.log.Error("error getting user roles, default role was returned", op, err.Error())
-	//	roles = &[]string{"member"}
-	//}
-	//fmt.Print(roles)
-	////refresh, access, err = jwt.GenerateTokenPair(user, app, *roles, a.tokenTTL)
-	//
-	//if err != nil {
-	//	a.log.Error("failed to generate tokens", err.Error())
-	//	return "", "", fmt.Errorf("%s: %w", op, err)
-	//}
-	//
-	//err = a.tokenCleaner.RemoveAllUserTokens(ctx, user.ID)
-	//if err != nil {
-	//	a.log.Error("failed to remove user tokens", err.Error())
-	//}
-	//
-	//timeToExpire := time.Now().Add(a.refreshTTL)
-	//err = a.tokenProvider.CachedSaveRefreshToken(ctx, nil, user.ID, refresh, timeToExpire)
-	//if err != nil {
-	//	if !errors.Is(err, storage.InfoCacheDisabled) {
-	//		a.log.Error("failed to save token", err.Error())
-	//		return "", "", fmt.Errorf("%s: %w", op, err)
-	//	}
-	//}
-	//
-	//// not strict if error pass
-	////_, err = a.sessionStorage.SaveSession(ctx, user.ID, appID, "ip", "device")
-	////if err != nil {
-	////	if !(errors.Is(err, storage.InfoCacheDisabled)) {
-	////		a.log.Error("failed to save session", err.Error())
-	////	}
-	////	a.log.Warn("session was not saved, cache disabled", err.Error())
-	////}
-	//
-	//return access, refresh, nil
-	return nil, nil
+	err = a.tokenStorage.RemoveAllUserTokens(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("error removing user's refresh tokens: %w", err)
+	}
+
+	err = a.tokenStorage.SaveRefreshToken(ctx, refresh)
+	if err != nil {
+		return nil, fmt.Errorf("error saving refresh token: %w", err)
+	}
+
+	return tokenSet, nil
 }
 
 // Login checks if user with given credentials exists in system
@@ -333,9 +338,11 @@ func (a *Auth) Login(
 ) (string, error) {
 	const op = "auth.Login"
 
+	env := utilities.EnvFromContext(ctx)
 	logger := a.log.With(
 		slog.String("op", op),
 		slog.String("email", email),
+		slog.String("env", env),
 	)
 
 	logger.Info("attempting to login user")
@@ -357,8 +364,10 @@ func (a *Auth) Login(
 	}
 	logger.Info("user authorized successfully", slog.String("userID", fmt.Sprintf("%v", user.ID)))
 
-	if !user.IsEmailVerified {
-		return "", storage.ErrUserNotConfirmedEmail
+	if env == interceptors.EnvProd {
+		if !user.IsEmailVerified {
+			return "", storage.ErrUserNotConfirmedEmail
+		}
 	}
 
 	logger.Info("user logged in successfully")
@@ -368,7 +377,7 @@ func (a *Auth) Login(
 	// extract sessionID from cookies and validates session
 	sessionID, err := utilities.GetUserSession(ctx, logger)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error while getting user's session from request metadata: %w", err)
 	}
 	session, err := a.sessionStorage.Session(ctx, sessionID)
 	if err != nil {
@@ -376,7 +385,7 @@ func (a *Auth) Login(
 			return "", err
 		}
 		// todo буквально не знаю что в этом случае делать, но нужно перессылать на главную страницу приложения, чтобы он стучался оттуда
-		return redirectUri, nil
+		return redirectUri, fmt.Errorf("error while getting session from db: %w", err)
 	}
 	// todo сессия может быть просрочена, но так как это сессия пустышка, то не пугаемся (но не знаем что делать)
 	// --extract client's IP and saves it as trusted IP address (make it step when exchange auth code on tokens)
@@ -389,6 +398,7 @@ func (a *Auth) Login(
 	if err != nil {
 		return "", err
 	}
+	logger.Debug("session's metadata successfully received", slog.String("sessionID", sessionID))
 	stateParam := sessionMetadata.State
 	// create an authorization code and saves it
 	authCode := &models.AuthorizationCode{
@@ -397,7 +407,12 @@ func (a *Auth) Login(
 		ExpiresAt: time.Now().Add(a.authorizationCodeTTL),
 		Scope:     session.Scope,
 	}
+	err = a.authCodeStorage.RemoveAuthCode(ctx, user.ID)
+	if err != nil {
+		return "", fmt.Errorf("error while removing auth code: %w", err)
+	}
 	err = a.authCodeStorage.SaveAuthCode(ctx, authCode)
+	logger.Info("auth code saved successfully", slog.String("scope", session.Scope))
 	if err != nil {
 		return "", err
 	}
@@ -407,8 +422,14 @@ func (a *Auth) Login(
 		if !errors.Is(err, storage.InfoTrustedIPNotFound) {
 			return "", fmt.Errorf("error while checking trusted IP: %w", err)
 		}
+		err = a.ipProvider.SaveTrustedIPv4(ctx, clientIP, user.ID)
+		if err != nil {
+			return "", err
+		}
+		logger.Info("user added new trusted ip")
 	}
-	err = a.ipProvider.SaveTrustedIPv4(ctx, clientIP, user.ID)
+	// deletes previous authenticated sessions
+	err = a.sessionStorage.RemoveAllUserSessions(ctx, user.ID)
 	if err != nil {
 		return "", err
 	}
@@ -417,6 +438,7 @@ func (a *Auth) Login(
 	if err != nil {
 		return "", fmt.Errorf("error while autenticated user's session: %w", err)
 	}
+	logger.Info("user authenticated successfully", slog.String("sessionID", fmt.Sprintf("%v", sessionID)))
 	// generate redirect uri with code and state as parameters
 	redirectUri += fmt.Sprintf("?code=%s&state=%s", authCode.Code, stateParam)
 	return redirectUri, nil
@@ -432,7 +454,6 @@ func (a *Auth) RegisterNewUser(
 	password string,
 ) (int64, error) {
 	const op = "auth.RegisterNewUser"
-
 	log := a.log.With(
 		slog.String("op", op),
 		slog.String("email", email),

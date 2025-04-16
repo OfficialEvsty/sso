@@ -33,9 +33,9 @@ func (r *SessionCachedRepository) Session(ctx context.Context, sessionID string)
 	// todo make a cache getter
 	err := r.db.QueryRow(
 		ctx,
-		`SELECT * FROM sessions WHERE id = $1`,
+		`SELECT id, client_id, ipv4, scope, created_at, expires_at FROM sessions WHERE id = $1`,
 		sessionID,
-	).Scan(&session)
+	).Scan(&session.Id, &session.ClientId, &session.Ip, &session.Scope, &session.CreatedAt, &session.ExpiresAt)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("error while getting session: %w", err)
@@ -53,7 +53,7 @@ func (r *SessionCachedRepository) SessionMetadata(ctx context.Context, sessionID
 		ctx,
 		`SELECT * FROM session_metadata WHERE session_id = $1`,
 		sessionID,
-	).Scan(&metadata)
+	).Scan(&metadata.Id, &metadata.RedirectUri, &metadata.State, &metadata.SessionID)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("error while getting session: %w", err)
@@ -110,7 +110,6 @@ func (r *SessionCachedRepository) AuthenticateUserSession(ctx context.Context, s
 // SaveOAuthSession saves unauthenticated(empty) models.OAuthSession
 func (r *SessionCachedRepository) SaveOAuthSession(ctx context.Context, session *models.OAuthSession) (uuid.UUID, error) {
 	table := "sessions"
-	session.Id = uuid.New()
 	sessionID, err := r.db.SaveOrUpdate(ctx, table, session, "id")
 	if err != nil {
 		return uuid.Nil, err
@@ -163,10 +162,16 @@ func (r *SessionCachedRepository) RemoveSession(ctx context.Context, sessionID s
 }
 
 // RemoveAllUserSessions clears all sessions bound to userId
-func (r *SessionCachedRepository) RemoveAllUserSessions(ctx context.Context, userID int64) {
-	_ = r.db.QueryRow(
+func (r *SessionCachedRepository) RemoveAllUserSessions(ctx context.Context, userID int64) error {
+	_, err := r.db.Exec(
 		ctx,
-		`DELETE FROM sessions WHERE user_id = $1`,
+		`DELETE FROM sessions WHERE id IN (SELECT session_id FROM user_sessions WHERE user_id = $1)`,
 		userID,
 	)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("error while deleting already exists user's sessions: %w", err)
+		}
+	}
+	return nil
 }

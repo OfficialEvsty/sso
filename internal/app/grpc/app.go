@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"sso/internal/api/mail"
+	"sso/internal/app/interceptors"
 	accessrpc "sso/internal/grpc/access"
 	authrpc "sso/internal/grpc/auth"
 	sessionrpc "sso/internal/grpc/session"
@@ -24,6 +25,7 @@ type App struct {
 
 // New creates new gRPC server app
 func New(
+	env string,
 	log *slog.Logger,
 	authService *auth.Auth,
 	sessionService *session.Session,
@@ -32,7 +34,8 @@ func New(
 	mailService *mail.MailClient,
 	port int,
 ) *App {
-	gRPCServer := grpc.NewServer()
+	gRPCServer := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.EnvUnaryInterceptor(env)))
 
 	authrpc.Register(gRPCServer, authService, verificationService, mailService)
 	sessionrpc.Register(gRPCServer, sessionService)

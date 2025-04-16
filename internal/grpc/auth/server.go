@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log"
 	"sso/internal/api/mail"
+	"sso/internal/app/interceptors"
 	"sso/internal/domain/models"
 	"sso/internal/lib/jwt"
+	"sso/internal/lib/utilities"
 	"sso/internal/services/auth"
 	"sso/internal/services/session"
 	"sso/internal/services/verification"
@@ -63,7 +64,56 @@ func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Ver
 	ssov1.RegisterAuthServiceServer(gRPC, &serverAPI{auth: *auth, verification: *verification, mailer: *mailer})
 }
 
-// Authorize OAuth2.0 specification authorization method
+// Token OAuth2.1 specification exchanges Authorization Code on Tokens handler
+// Receive ID, Access and Refresh tokens signed by private key of RS256 method
+func (s *serverAPI) Token(ctx context.Context, req *ssov1.TokenRequest) (*ssov1.TokenResponse, error) {
+	// check preconditions (fields MUST NOT be empty)
+	err := validateTokenRequestOnEmptyFields(req)
+	if err != nil {
+		return nil, err
+	}
+	set, err := s.auth.Token(
+		ctx,
+		req.GetAuthCode(),
+		req.GetGrantType(),
+		req.GetRedirectUri(),
+		req.GetCodeVerifier(),
+		req.GetClientId(),
+	)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
+	return &ssov1.TokenResponse{
+		IdToken:      set.ID.Token,
+		AccessToken:  set.Access.Token,
+		RefreshToken: set.Refresh.Token,
+		ExpiresIn:    uint32(set.Access.ExpiresAt.Unix()),
+		TokenType:    "Bearer",
+	}, nil
+}
+
+// validateTokenRequestOnEmptyFields validates token request on empty fields
+func validateTokenRequestOnEmptyFields(req *ssov1.TokenRequest) error {
+	if req.GetClientId() == "" {
+		return status.Error(codes.InvalidArgument, "client id is empty")
+	}
+	if req.GetRedirectUri() == "" {
+		return status.Error(codes.InvalidArgument, "redirect uri is empty")
+	}
+	if req.GetAuthCode() == "" {
+		return status.Error(codes.InvalidArgument, "auth code is empty")
+	}
+	if req.GetCodeVerifier() == "" {
+		return status.Error(codes.InvalidArgument, "code verifier is empty")
+	}
+	if req.GetGrantType() == "" {
+		return status.Error(codes.InvalidArgument, "grant type is empty")
+	}
+	return nil
+}
+
+// Authorize OAuth2.1 specification authorization method
 // If user has the active session simplify redirects with authorization code
 // Else creates initial session and redirects user on login page
 // Throw error if faces unpredictably behaviour
@@ -105,7 +155,7 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 	return &ssov1.AuthorizeResponse{
 		Response: &ssov1.AuthorizeResponse_Success{
 			Success: &ssov1.SuccessResponse{
-				RedirectUri: req.RedirectUri,
+				RedirectUri: req.RedirectUri + "?code=" + code.String() + "&state=" + req.GetState(),
 				Code:        code.String(),
 				State:       req.GetState(),
 			},
@@ -140,12 +190,8 @@ func validateAuthorizeRequestOnEmptyFields(req *ssov1.AuthorizeRequest) error {
 }
 
 func parsePKCE(code string, method string) (*models.PKCE, error) {
-	cc, err := uuid.Parse(code)
-	if err != nil {
-		return nil, err
-	}
 	pkce := &models.PKCE{
-		CodeChallenge: cc,
+		CodeChallenge: code,
 		Method:        method,
 	}
 	return pkce, nil
@@ -174,7 +220,7 @@ func (s *serverAPI) Login(
 		if errors.Is(err, storage.ErrInvalidCredentials) {
 			return nil, status.Error(codes.PermissionDenied, "invalid credentials")
 		}
-		return nil, status.Error(codes.PermissionDenied, "permission denied")
+		return nil, status.Error(codes.Internal, fmt.Sprint("permission denied, error: ", err.Error()))
 	}
 
 	// sending metadata pairs as headers
@@ -204,7 +250,7 @@ func (s *serverAPI) Register(
 	if req.GetCallbackUrl() == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing callback url")
 	}
-
+	env := utilities.EnvFromContext(ctx)
 	// registering a user
 	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
 	if err != nil {
@@ -227,6 +273,10 @@ func (s *serverAPI) Register(
 		}
 	}()
 
+	if env != interceptors.EnvProd {
+		operationsSuccessful = true
+		return &ssov1.RegisterResponse{UserId: userID}, nil
+	}
 	// generating token
 	token, err := jwt.NewVerifyingToken()
 	if err != nil {

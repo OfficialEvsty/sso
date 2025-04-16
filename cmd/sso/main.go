@@ -6,13 +6,9 @@ import (
 	"os"
 	"os/signal"
 	"sso/internal/app"
+	"sso/internal/app/interceptors"
 	"sso/internal/config"
 	"syscall"
-)
-
-const (
-	envLocal = "local"
-	envProd  = "prod"
 )
 
 func main() {
@@ -27,6 +23,7 @@ func main() {
 		slog.Int("port", cfg.GRPC.Port))
 
 	application := app.New(
+		cfg.Env,
 		log,
 		cfg.GRPC.Port,
 		cfg.Redis,
@@ -54,11 +51,15 @@ func setupLogger(env string) *slog.Logger {
 	var log *slog.Logger
 
 	switch env {
-	case envLocal:
+	case interceptors.EnvLocal:
 		log = slog.New(
 			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
 		)
-	case envProd:
+	case interceptors.EnvProd:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		)
+	case interceptors.EnvDev:
 		log = slog.New(
 			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
 		)

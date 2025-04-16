@@ -28,7 +28,7 @@ func (r *AuthCodeRepository) AuthCode(ctx context.Context, code string) (*models
 		ctx,
 		`SELECT * FROM authorization_codes WHERE code = $1`,
 		code,
-	).Scan(&authCode)
+	).Scan(&authCode.Code, &authCode.UserID, &authCode.Scope, &authCode.ExpiresAt)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("failed to query authorization code: %w", err)
@@ -54,17 +54,13 @@ func (r *AuthCodeRepository) SaveAuthCode(ctx context.Context, code *models.Auth
 
 // RemoveAuthCode deletes models.AuthorizationCode from db by userID
 func (r *AuthCodeRepository) RemoveAuthCode(ctx context.Context, userID int64) (err error) {
-	var id string
-	err = r.db.QueryRow(
+	_, err = r.db.Exec(
 		ctx,
 		"DELETE FROM authorization_codes WHERE user_id = $1",
 		userID,
-	).Scan(&id)
+	)
 	if err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("failed to delete authorization code: %w", err)
-		}
-		return fmt.Errorf("authorization code record not found: %w", err)
+		return fmt.Errorf("failed to delete authorization code: %w", err)
 	}
 	return nil
 }

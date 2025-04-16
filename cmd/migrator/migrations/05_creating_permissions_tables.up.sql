@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS roles (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL
+    name VARCHAR(100) NOT NULL,
+    is_default BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS user_roles (
@@ -20,6 +21,6 @@ CREATE TABLE IF NOT EXISTS app_roles (
 );
 
 INSERT INTO roles (name) VALUES ('admin');
-INSERT INTO roles (name) VALUES ('openid');
-INSERT INTO roles (name) VALUES ('profile');
+INSERT INTO roles (name, is_default) VALUES ('openid', TRUE);
+INSERT INTO roles (name, is_default) VALUES ('profile', TRUE);
 /*INSERT INTO user_roles (user_id, role_id) VALUES (1, 1);*/

@@ -20,10 +20,12 @@ import (
 )
 
 type App struct {
-	GRPCSrv *grpcapp.App
+	GRPCSrv      *grpcapp.App
+	IsProduction bool
 }
 
 func New(
+	env string,
 	log *slog.Logger,
 	grpcPort int,
 	redisConfig config.RedisConfig,
@@ -45,6 +47,9 @@ func New(
 	vaultStorage := vault2.NewSignController(vault)
 	tokenProvider := jwt.NewTokenProvider(vaultStorage, tokenConfig)
 
+	// validation repositories
+	validationRepository := repositories.NewValidationRepository(storage.GetConnection())
+
 	// cashed repositories
 	sessionRepository := cached.NewSessionCachedRepository(storage.GetConnection(), cache.GetConnection())
 	userScopeRepository := cached.NewUserScopeRepository(storage.GetConnection(), cache.GetConnection())
@@ -64,7 +69,7 @@ func New(
 		refreshTTL,
 		sessionTTL,
 		authorizationCodeTTL,
-		storage,
+		validationRepository,
 		repositories.NewIPRepository(storage.GetConnection()),
 		repositories.NewPKCERepository(storage.GetConnection()),
 		repositories.NewAuthCodeRepository(storage.GetConnection()),
@@ -92,7 +97,7 @@ func New(
 		storage,
 	)
 
-	grpcApp := grpcapp.New(log, authService, sessionService, accessService, verificationService, mailService, grpcPort)
+	grpcApp := grpcapp.New(env, log, authService, sessionService, accessService, verificationService, mailService, grpcPort)
 
 	return &App{
 		GRPCSrv: grpcApp,

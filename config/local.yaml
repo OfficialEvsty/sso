@@ -1,4 +1,4 @@
-env: "local" #dev, prod
+env: "dev" #dev, prod
 conn_string: "postgres:postgres@localhost:5433/sso_db" #currently unused
 token_ttl: 15m
 refresh_token_ttl: 24h

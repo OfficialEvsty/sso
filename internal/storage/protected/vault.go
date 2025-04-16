@@ -1,6 +1,7 @@
 package protected
 
 import (
+	"fmt"
 	"github.com/hashicorp/vault/api"
 	"os"
 	"sso/internal/lib/extensions"
@@ -30,16 +31,21 @@ type Token struct {
 // NewVaultClient creates new instance of Vault client
 func NewVaultClient() (*Vault, error) {
 	vaultClient := Vault{}
-	client, err := api.NewClient(&api.Config{
-		Address: os.Getenv("VAULT_ADDR"),
-	})
+	config := api.DefaultConfig()
+	config.Address = os.Getenv("VAULT_ADDR")
+	client, err := api.NewClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("error while creating new vault client instance: %w", err)
+	}
 	vaultClient.Client = client
-	return &vaultClient, err
+	token, err := vaultClient.AuthUser()
+	vaultClient.Client.SetToken(token)
+	return &vaultClient, nil
 }
 
 // AuthUser authenticated service-user as Vault client
 func (v *Vault) AuthUser() (string, error) {
-	request := v.Client.NewRequest("POST", "/v1/auth/approle/login")
+	request := v.Client.NewRequest("POST", "auth/approle/login")
 	login := appRoleLogin{
 		SecretID: extensions.GetTextFromFile("./secrets/secret_id.txt"),
 		RoleID:   extensions.GetTextFromFile("./secrets/role_id.txt"),

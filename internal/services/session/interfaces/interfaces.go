@@ -23,7 +23,7 @@ type SessionStorage interface {
 	ActiveSession(ctx context.Context, sessionID string) (*models.UserSession, error)
 	Session(ctx context.Context, sessionID string) (*models.OAuthSession, error)
 	RemoveSession(ctx context.Context, sessionID string) error
-	RemoveAllUserSessions(ctx context.Context, userID int64)
+	RemoveAllUserSessions(ctx context.Context, userID int64) error
 }
 
 // SessionProvider provides operations with session terminate/get session

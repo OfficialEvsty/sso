@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/hashicorp/vault/api"
 	"sso/internal/storage/protected"
 	"strings"
 )
@@ -14,7 +13,7 @@ type SignProvider interface {
 	SignJWT(claims map[string]interface{}, keyVersion int) (string, error)
 	RotateKey() error
 	PublicKey(version string) (string, error)
-	LatestKeyVersion(vaultClient *api.Client) (int, error)
+	LatestKeyVersion() (int, error)
 }
 
 // SignController is a concrete implementation of SignProvider interface
@@ -31,7 +30,7 @@ func NewSignController(client *protected.Vault) *SignController {
 func (s *SignController) LatestKeyVersion() (int, error) {
 	secret, err := s.v.Client.Logical().Read("transit/keys/jwt_keys")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("error while read key: %w", err)
 	}
 
 	latestVersion := secret.Data["latest_version"].(json.Number)
@@ -64,7 +63,7 @@ func (s *SignController) SignJWT(claims map[string]interface{}, keyVersion int) 
 	data := map[string]interface{}{"input": claims, "keyVersion": keyVersion}
 	secret, err := s.v.Client.Logical().Write("transit/sign/jwt_keys", data)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error while signing token: %w", err)
 	}
 	signature := strings.TrimPrefix(secret.Data["signature"].(string), "vault:v1:")
 

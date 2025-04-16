@@ -14,6 +14,7 @@ done
 
 # Выполняем настройку AppRole
 export VAULT_TOKEN='root'
+export VAULT_ADDR="http://0.0.0.0:${VAULT_PORT}"
 
 if ! vault auth list | grep -q approle; then
   vault auth enable approle

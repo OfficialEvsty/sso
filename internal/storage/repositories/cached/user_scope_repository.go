@@ -26,13 +26,13 @@ func NewUserScopeRepository(db *postgres.ExtPool, cache *redis.Client) *UserScop
 func (r *UserScopeRepository) AllowedUserScope(
 	ctx context.Context,
 	userID int64,
-	appID int32,
+	appID int,
 ) ([]string, error) {
 	var roles []string
 	sql := "SELECT name FROM roles AS r " +
 		"JOIN user_roles AS ur on r.id = ur.role_id " +
 		"LEFT JOIN app_roles AS ar ON r.id = ar.role_id " +
-		"WHERE ur.user_id = $1 AND (ar.app_id = $2 OR ar.app_id IS NULL);"
+		"WHERE ur.user_id = $1 AND (ar.app_id = $2 OR ar.app_id IS NULL) OR r.is_default = TRUE;"
 
 	rows, err := r.db.Query(
 		ctx,

@@ -2,6 +2,7 @@ package interfaces
 
 import (
 	"context"
+	"net"
 	"sso/internal/domain/models"
 )
 
@@ -42,13 +43,13 @@ type AppProvider interface {
 // Changes if request args will change
 type AuthRequestValidator interface {
 	AuthorizeRequestValidate(ctx context.Context, clientID interface{}, redirectUri string, scope string, responseType string) (string, error)
-	TokenArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, authCode string) (err error)
+	TokenArgsValidate(ctx context.Context, clientID interface{}, redirectUri string, verifier string, sessionID, grant string) (err error)
 }
 
 // IPProvider saves/gets user's trusted ip via login
 type IPProvider interface {
 	SaveTrustedIPv4(ctx context.Context, trustedIP string, userID int64) error
-	GetAllUserTrustedIPv4(ctx context.Context, userID int64) ([]string, error)
+	GetAllUserTrustedIPv4(ctx context.Context, userID int64) ([]net.IP, error)
 	CheckUserTrustedIPv4(ctx context.Context, ipv4 string) error
 }
 

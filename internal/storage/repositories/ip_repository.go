@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"net"
 	"sso/internal/storage"
 	"sso/internal/storage/postgres"
 )
@@ -36,7 +37,7 @@ func (r *IPRepository) SaveTrustedIPv4(ctx context.Context, trustedIP string, us
 }
 
 // GetAllUserTrustedIPv4 gets all trusted user's ips
-func (r *IPRepository) GetAllUserTrustedIPv4(ctx context.Context, userID int64) (trustedIPs []string, err error) {
+func (r *IPRepository) GetAllUserTrustedIPv4(ctx context.Context, userID int64) (trustedIPs []net.IP, err error) {
 	rows, err := r.db.Query(
 		ctx,
 		`SELECT ipv4 FROM user_trusted_ips WHERE user_id = $1`,
@@ -47,7 +48,7 @@ func (r *IPRepository) GetAllUserTrustedIPv4(ctx context.Context, userID int64) 
 		return nil, fmt.Errorf("failed to query trusted ips: %w: ", err)
 	}
 	for rows.Next() {
-		var trustedIP string
+		var trustedIP net.IP
 		if err := rows.Scan(&trustedIP); err != nil {
 			return nil, fmt.Errorf("failed to scan trusted ips: %w", err)
 		}

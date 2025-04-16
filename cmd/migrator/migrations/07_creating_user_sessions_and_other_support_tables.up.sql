@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     user_id BIGINT NOT NULL,
     session_id VARCHAR(36) NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    CONSTRAINT unique_session_per_user UNIQUE (user_id, session_id)
 );
 
 CREATE TABLE IF NOT EXISTS session_metadata (
