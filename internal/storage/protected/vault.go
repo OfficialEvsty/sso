@@ -1,23 +1,19 @@
 package protected
 
 import (
+	"context"
 	"fmt"
-	"github.com/hashicorp/vault/api"
-	"os"
+	"github.com/hashicorp/vault-client-go"
+	"github.com/hashicorp/vault-client-go/schema"
 	"sso/internal/lib/extensions"
+	"time"
 )
-
-// appRoleLogin holds authenticated data to provide accessed connection to Vault client
-type appRoleLogin struct {
-	RoleID   string `json:"role_id"`
-	SecretID string `json:"secret_id"`
-}
 
 // Vault is a client instance to Hashicorp Vault secure storage for storing secrets
 // Token is a way to access to Vault secret's storage
 type Vault struct {
 	Token         string
-	Client        *api.Client
+	Client        *vault.Client
 	LeaseDuration int
 }
 
@@ -28,45 +24,39 @@ type Token struct {
 	} `json:"auth"`
 }
 
-// NewVaultClient creates new instance of Vault client
+// NewVaultClient creates new instance of Vault client in DEV
 func NewVaultClient() (*Vault, error) {
-	vaultClient := Vault{}
-	config := api.DefaultConfig()
-	config.Address = os.Getenv("VAULT_ADDR")
-	client, err := api.NewClient(config)
+	vault_ := Vault{}
+	vaultAddr := extensions.GetEnv("VAULT_ADDR", "http://vault:8200")
+	client, err := vault.New(
+		vault.WithAddress(vaultAddr),
+		vault.WithRequestTimeout(30*time.Second),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error while creating new vault client instance: %w", err)
 	}
-	vaultClient.Client = client
-	token, err := vaultClient.AuthUser()
-	vaultClient.Client.SetToken(token)
-	return &vaultClient, nil
+	vault_.Client = client
+	err = vault_.Client.SetToken("root")
+	if err != nil {
+		return nil, fmt.Errorf("error while setting token: %w", err)
+	}
+	return &vault_, nil
 }
 
 // AuthUser authenticated service-user as Vault client
-func (v *Vault) AuthUser() (string, error) {
-	request := v.Client.NewRequest("POST", "auth/approle/login")
-	login := appRoleLogin{
-		SecretID: extensions.GetTextFromFile("./secrets/secret_id.txt"),
-		RoleID:   extensions.GetTextFromFile("./secrets/role_id.txt"),
-	}
+func (v *Vault) AuthUser(ctx context.Context) error {
+	resp, err := v.Client.Auth.AppRoleLogin(
+		ctx,
+		schema.AppRoleLoginRequest{
+			RoleId:   extensions.GetTextFromFile("./secrets/role_id.txt"),
+			SecretId: extensions.GetTextFromFile("./secrets/secret_id.txt"),
+		})
 
-	// Sets login into request's body
-	if err := request.SetJSONBody(login); err != nil {
-		return "", err
-	}
-
-	// step: make the request
-	resp, err := v.Client.RawRequest(request)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer resp.Body.Close()
-
-	// step: parse and return auth
-	secret, err := api.ParseSecret(resp.Body)
-	if err != nil {
-		return "", err
+	if err = v.Client.SetToken(resp.Auth.ClientToken); err != nil {
+		return err
 	}
-	return secret.Auth.ClientToken, nil
+	return nil
 }

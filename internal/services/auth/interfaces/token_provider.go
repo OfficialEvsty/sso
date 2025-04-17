@@ -23,8 +23,8 @@ type ClaimedToken interface {
 
 // TokenProvider generates JWT
 type TokenProvider interface {
-	MakeIDToken(user *models.User, aud string) (*tokens.IDToken, error)
-	MakeAccessToken(user *models.User, aud string, scope string) (*tokens.AccessToken, error)
+	MakeIDToken(ctx context.Context, user *models.User, aud string) (*tokens.IDToken, error)
+	MakeAccessToken(ctx context.Context, user *models.User, aud string, scope string) (*tokens.AccessToken, error)
 	MakeRefreshToken(userID int64) (*models.RefreshToken, error)
 	MakeTokenSet(id *tokens.IDToken, access *tokens.AccessToken, refresh *models.RefreshToken) *tokens.TokenSet
 }

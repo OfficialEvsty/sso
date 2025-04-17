@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -42,10 +43,10 @@ func (p *TokenProvider) MakeTokenSet(
 }
 
 // MakeIDToken turns user claims to base64 encoded string with encrypted sign
-func (p *TokenProvider) MakeIDToken(user *models.User, aud string) (*tokens.IDToken, error) {
+func (p *TokenProvider) MakeIDToken(ctx context.Context, user *models.User, aud string) (*tokens.IDToken, error) {
 	tokenTTL := p.TTLs[config.ID]
 	tokenExpiresAt := time.Now().Add(tokenTTL)
-	domain := os.Getenv("DOMAIN")
+	domain := os.Getenv("WEB_CLIENT_DOMAIN")
 	claims := map[string]interface{}{
 		"iss":         fmt.Sprintf("https://%s", domain),
 		"sub":         user.ID,
@@ -56,12 +57,12 @@ func (p *TokenProvider) MakeIDToken(user *models.User, aud string) (*tokens.IDTo
 		"is_verified": user.IsEmailVerified,
 	}
 	// Getting latest version of private key to sign a token
-	latestKeyVersion, err := p.sign.LatestKeyVersion()
+	latestKeyVersion, err := p.sign.LatestKeyVersion(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting latest version of JWS key: %w", err)
 	}
 	// Signs a token with RS256
-	signedToken, err := p.sign.SignJWT(claims, latestKeyVersion)
+	signedToken, err := p.sign.SignJWT(ctx, claims, latestKeyVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +74,8 @@ func (p *TokenProvider) MakeIDToken(user *models.User, aud string) (*tokens.IDTo
 }
 
 // MakeAccessToken Creates auth-token for specified user and app with limited token's duration
-func (p *TokenProvider) MakeAccessToken(user *models.User, aud string, scope string) (*tokens.AccessToken, error) {
-	domain := os.Getenv("DOMAIN")
+func (p *TokenProvider) MakeAccessToken(ctx context.Context, user *models.User, aud string, scope string) (*tokens.AccessToken, error) {
+	domain := os.Getenv("WEB_CLIENT_DOMAIN")
 	tokenTTL := p.TTLs[config.ACCESS]
 	tokenExpiresAt := time.Now().Add(tokenTTL)
 	claims := map[string]interface{}{
@@ -84,13 +85,13 @@ func (p *TokenProvider) MakeAccessToken(user *models.User, aud string, scope str
 		"scope": scope,
 		"exp":   tokenExpiresAt.Unix(),
 	}
-	latestKeyVersion, err := p.sign.LatestKeyVersion()
+	latestKeyVersion, err := p.sign.LatestKeyVersion(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting latest version of JWS key: %w", err)
 	}
 
 	// Signs a token with RS256
-	signedToken, err := p.sign.SignJWT(claims, latestKeyVersion)
+	signedToken, err := p.sign.SignJWT(ctx, claims, latestKeyVersion)
 	return &tokens.AccessToken{
 		Token:     signedToken,
 		Claims:    claims,

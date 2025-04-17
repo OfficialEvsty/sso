@@ -298,12 +298,12 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 	}
 	resultScope := strings.Join(resultScopeSlice, " ")
 	// generate tokens set (id, access, refresh)
-	idToken, err := a.tokenProvider.MakeIDToken(&user, aud)
+	idToken, err := a.tokenProvider.MakeIDToken(ctx, &user, aud)
 	if err != nil {
 		return nil, fmt.Errorf("error generating id token: %w", err)
 	}
 	logger.Debug("idToken generated")
-	acsToken, err := a.tokenProvider.MakeAccessToken(&user, aud, resultScope)
+	acsToken, err := a.tokenProvider.MakeAccessToken(ctx, &user, aud, resultScope)
 	if err != nil {
 		return nil, fmt.Errorf("error generating access token: %w", err)
 	}

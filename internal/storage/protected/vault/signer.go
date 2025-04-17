@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,10 +11,10 @@ import (
 
 // SignProvider interface allows sign a JWT and give upon request a Public Key
 type SignProvider interface {
-	SignJWT(claims map[string]interface{}, keyVersion int) (string, error)
-	RotateKey() error
-	PublicKey(version string) (string, error)
-	LatestKeyVersion() (int, error)
+	SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error)
+	RotateKey(ctx context.Context) error
+	PublicKey(ctx context.Context, version string) (string, error)
+	LatestKeyVersion(ctx context.Context) (int, error)
 }
 
 // SignController is a concrete implementation of SignProvider interface
@@ -26,62 +27,118 @@ func NewSignController(client *protected.Vault) *SignController {
 	return &SignController{v: client}
 }
 
-// LatestKeyVersion get latest key version
-func (s *SignController) LatestKeyVersion() (int, error) {
-	secret, err := s.v.Client.Logical().Read("transit/keys/jwt_keys")
+// LatestKeyVersion gets the latest key version with proper error handling
+func (s *SignController) LatestKeyVersion(ctx context.Context) (int, error) {
+	secret, err := s.v.Client.Read(ctx, "transit/keys/jwt_keys")
 	if err != nil {
-		return 0, fmt.Errorf("error while read key: %w", err)
+		return 0, fmt.Errorf("failed to read key: %w", err)
 	}
 
-	latestVersion := secret.Data["latest_version"].(json.Number)
-	version, _ := latestVersion.Int64()
+	if secret == nil || secret.Data == nil {
+		return 0, fmt.Errorf("empty response from vault")
+	}
+
+	versionRaw, ok := secret.Data["latest_version"]
+	if !ok {
+		return 0, fmt.Errorf("latest_version field missing")
+	}
+
+	versionNum, ok := versionRaw.(json.Number)
+	if !ok {
+		return 0, fmt.Errorf("invalid version format")
+	}
+
+	version, err := versionNum.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("version conversion failed: %w", err)
+	}
+
 	return int(version), nil
 }
 
-// SignJWT signs a JWT with private key
-func (s *SignController) SignJWT(claims map[string]interface{}, keyVersion int) (string, error) {
-	// Header for JWT, describes what algorithm was used for JWT signification
+// SignJWT signs a JWT with improved error handling
+func (s *SignController) SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error) {
 	header := map[string]interface{}{
 		"alg": "RS256",
 		"typ": "JWT",
-		"kid": fmt.Sprintf("%d", keyVersion), // Key ID из версии ключа
+		"kid": fmt.Sprintf("%d", keyVersion),
 	}
 
-	// Encoding header and body to base64
 	headerJSON, err := json.Marshal(header)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal header: %v", err)
+		return "", fmt.Errorf("header marshaling failed: %w", err)
 	}
+
 	claimsJSON, err := json.Marshal(claims)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal claims: %v", err)
+		return "", fmt.Errorf("claims marshaling failed: %w", err)
 	}
 
-	headerBase64 := base64.RawURLEncoding.EncodeToString(headerJSON)
-	claimsBase64 := base64.RawURLEncoding.EncodeToString(claimsJSON)
+	headerBase64 := base64.RawURLEncoding.WithPadding('=').EncodeToString(headerJSON)
+	claimsBase64 := base64.RawURLEncoding.WithPadding('=').EncodeToString(claimsJSON)
 
-	data := map[string]interface{}{"input": claims, "keyVersion": keyVersion}
-	secret, err := s.v.Client.Logical().Write("transit/sign/jwt_keys", data)
+	signingData := map[string]interface{}{
+		"input":       claimsBase64,
+		"key_version": keyVersion,
+	}
+	secret, err := s.v.Client.Write(ctx, "transit/sign/jwt_keys", signingData)
 	if err != nil {
-		return "", fmt.Errorf("error while signing token: %w", err)
+		return "", fmt.Errorf("vault signing failed: %w, %s", err, claimsBase64)
 	}
-	signature := strings.TrimPrefix(secret.Data["signature"].(string), "vault:v1:")
 
-	jwt := fmt.Sprintf("%s.%s.%s", headerBase64, claimsBase64, signature)
-	return jwt, nil
+	if secret == nil || secret.Data == nil {
+		return "", fmt.Errorf("empty response from vault")
+	}
+
+	signatureRaw, ok := secret.Data["signature"]
+	if !ok {
+		return "", fmt.Errorf("signature missing in response")
+	}
+
+	signature, ok := signatureRaw.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid signature format")
+	}
+
+	// Remove vault prefix if present
+	signature = strings.TrimPrefix(signature, "vault:v1:")
+
+	return fmt.Sprintf("%s.%s.%s", headerBase64, claimsBase64, signature), nil
 }
 
-// RotateKey rotates pair's key: private and public
-func (s *SignController) RotateKey() error {
-	_, err := s.v.Client.Logical().Write("transit/keys/jwt_keys/rotate", nil)
-	return err
+// RotateKey rotates the key pair with error handling
+func (s *SignController) RotateKey(ctx context.Context) error {
+	_, err := s.v.Client.Write(ctx, "transit/keys/jwt_keys/rotate", nil)
+	if err != nil {
+		return fmt.Errorf("key rotation failed: %w", err)
+	}
+	return nil
 }
 
-// PublicKey give a public key
-func (s *SignController) PublicKey(version string) (string, error) {
-	secret, err := s.v.Client.Logical().Read(fmt.Sprintf("transit/keys/jwt_keys/%s", version))
-	if err != nil {
-		return "", err
+// PublicKey retrieves the public key with version validation
+func (s *SignController) PublicKey(ctx context.Context, version string) (string, error) {
+	if version == "" {
+		return "", fmt.Errorf("version cannot be empty")
 	}
-	return secret.Data["public_key"].(string), nil
+
+	secret, err := s.v.Client.Read(ctx, fmt.Sprintf("transit/keys/jwt_keys/%s", version))
+	if err != nil {
+		return "", fmt.Errorf("failed to read public key: %w", err)
+	}
+
+	if secret == nil || secret.Data == nil {
+		return "", fmt.Errorf("empty response from vault")
+	}
+
+	pubKeyRaw, ok := secret.Data["public_key"]
+	if !ok {
+		return "", fmt.Errorf("public_key missing in response")
+	}
+
+	pubKey, ok := pubKeyRaw.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid public key format")
+	}
+
+	return pubKey, nil
 }

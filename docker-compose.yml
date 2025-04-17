@@ -26,6 +26,8 @@ services:
       - ./internal/storage/protected/vault/scripts:/scripts  # Монтируем скрипт инициализации
     cap_add:
       - IPC_LOCK
+    networks:
+      - sso-network
 
   redis:
     image: redis:latest
@@ -112,6 +114,7 @@ services:
       MAIL_PORT: $MAIL_PORT
       WEB_CLIENT_DOMAIN: $WEB_CLIENT_DOMAIN
       WEB_CLIENT_PORT: $WEB_CLIENT_PORT
+      VAULT_ADDR: $VAULT_ADDR
     ports:
       - ${SSO_PORT}:${SSO_PORT}
     networks:
