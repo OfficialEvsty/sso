@@ -13,21 +13,46 @@ import (
 	"time"
 )
 
+var (
+	InfoCacheDisabled = errors.New("info cache is disabled")
+	ErrKeyNotFound    = errors.New("key not found")
+)
+
+// CacheWrapper custom wrapper
+type CacheWrapper struct {
+	*redis.Client
+	enabled bool
+	keysTTL map[string]time.Duration
+}
+
+// Enabled Getter
+func (w *CacheWrapper) Enabled() bool {
+	return w.enabled
+}
+
+// KeyTTL gets duration of key's time to live
+func (w *CacheWrapper) KeyTTL(key string) time.Duration {
+	ttl, ok := w.keysTTL[key]
+	if !ok {
+		return w.keysTTL["default"]
+	}
+	return ttl
+}
+
 // Cache using redis provides fast access to important and reusing data
 type Cache struct {
-	rdb                   *redis.Client
+	rdb                   *CacheWrapper
 	sessionTTL            time.Duration
 	emailAuthTokenTTL     time.Duration
 	passwordResetTokenTTL time.Duration
-	useCache              bool
 }
 
-func (c *Cache) GetConnection() *redis.Client {
+func (c *Cache) GetConnection() *CacheWrapper {
 	return c.rdb
 }
 
 // NewCache creates new instance of redis client
-func NewCache(conf *config.RedisConfig, useCache bool) (*Cache, error) {
+func NewCache(conf *config.RedisConfig) (*Cache, error) {
 	get := extensions.GetEnv
 
 	host, port, password :=
@@ -41,10 +66,15 @@ func NewCache(conf *config.RedisConfig, useCache bool) (*Cache, error) {
 		DB:       0,
 	})
 
-	return &Cache{rdb: rdb, sessionTTL: conf.SessionTTL,
+	return &Cache{rdb: &CacheWrapper{
+		Client:  rdb,
+		enabled: conf.CacheConfig.Enabled,
+		keysTTL: conf.CacheConfig.CacheKeyTTLs,
+	},
+		sessionTTL:            conf.SessionTTL,
 		emailAuthTokenTTL:     conf.EmailAuthTokenTTL,
 		passwordResetTokenTTL: conf.PasswordResetTokenTTL,
-		useCache:              useCache}, nil
+	}, nil
 }
 
 // SaveSession saves user's session in cache
@@ -55,7 +85,7 @@ func (c *Cache) SaveSession(
 	ip string,
 	device string,
 ) (sessionID string, err error) {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return "", storage.InfoCacheDisabled
 	}
 	sessionID = "session:" + strconv.Itoa(int(userID))
@@ -92,7 +122,7 @@ func (c *Cache) UserSessions(
 	ctx context.Context,
 	userID int64,
 ) ([]models.Session, error) {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return nil, storage.InfoCacheDisabled
 	}
 	key := "session:" + strconv.Itoa(int(userID))
@@ -123,7 +153,7 @@ func (c *Cache) SaveRefreshToken(
 	token string,
 	expiresAt time.Time,
 ) error {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "refresh_tokens:" + token
@@ -147,7 +177,7 @@ func (c *Cache) SaveRefreshToken(
 // допустил глупую ощибку в имя ключа поставил -, а не _ и тупил 30 минут, нормализируйте имена ключей
 // RefreshToken gets token from cache if it
 func (c *Cache) RefreshToken(ctx context.Context, token string) (*models.RefreshToken, error) {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return nil, storage.InfoCacheDisabled
 	}
 	tokenKey := "refresh_tokens:" + token
@@ -172,7 +202,7 @@ func (c *Cache) RefreshToken(ctx context.Context, token string) (*models.Refresh
 
 // DeleteRefreshToken removes token from cache
 func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "refresh_tokens:" + token
@@ -186,7 +216,7 @@ func (c *Cache) DeleteRefreshToken(ctx context.Context, token string) error {
 // SaveEmailToken saves token for mail authorization due to check user's email valid
 // If useCache disabled throws error
 func (c *Cache) SaveEmailToken(ctx context.Context, email string, token string) error {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "mail_auth_token:" + token
@@ -208,7 +238,7 @@ func (c *Cache) SaveEmailToken(ctx context.Context, email string, token string) 
 
 // EmailToken gets cached token, if it not expires and verify email attached to user
 func (c *Cache) EmailToken(ctx context.Context, token string) (*models.MailAuthToken, error) {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return nil, storage.InfoCacheDisabled
 	}
 	tokenKey := "mail_auth_token:" + token
@@ -233,7 +263,7 @@ func (c *Cache) EmailToken(ctx context.Context, token string) (*models.MailAuthT
 
 // DeleteEmailToken removes token from cache
 func (c *Cache) DeleteEmailToken(ctx context.Context, token string) error {
-	if !c.useCache {
+	if !c.rdb.Enabled() {
 		return storage.InfoCacheDisabled
 	}
 	tokenKey := "mail_auth_token:" + token

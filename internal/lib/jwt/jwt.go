@@ -66,11 +66,18 @@ func (p *TokenProvider) MakeIDToken(ctx context.Context, user *models.User, aud 
 	if err != nil {
 		return nil, err
 	}
-	return &tokens.IDToken{
+
+	idToken := &tokens.IDToken{
 		Token:     signedToken,
 		Claims:    claims,
 		ExpiresAt: tokenExpiresAt,
-	}, nil
+	}
+	// claims validation
+	err = p.claims.IsClaimsValid(idToken)
+	if err != nil {
+		return nil, err
+	}
+	return idToken, nil
 }
 
 // MakeAccessToken Creates auth-token for specified user and app with limited token's duration
@@ -92,11 +99,18 @@ func (p *TokenProvider) MakeAccessToken(ctx context.Context, user *models.User, 
 
 	// Signs a token with RS256
 	signedToken, err := p.sign.SignJWT(ctx, claims, latestKeyVersion)
-	return &tokens.AccessToken{
+
+	acsToken := &tokens.AccessToken{
 		Token:     signedToken,
 		Claims:    claims,
 		ExpiresAt: tokenExpiresAt,
-	}, nil
+	}
+	// claims validation
+	err = p.claims.IsClaimsValid(acsToken)
+	if err != nil {
+		return nil, err
+	}
+	return acsToken, nil
 }
 
 // MakeRefreshToken creates refresh token for specified user and app with limited token's duration

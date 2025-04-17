@@ -324,6 +324,19 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 		return nil, fmt.Errorf("error saving refresh token: %w", err)
 	}
 
+	// cleaning all unnecessary data
+	err = a.authCodeStorage.RemoveAuthCode(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("error removing auth code: %w", err)
+	}
+	err = a.sessionStorage.RemoveSessionMetadata(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("error removing session's metadata: %w", err)
+	}
+	err = a.pkceStorage.RemovePKCE(ctx, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("error removing pkce: %w", err)
+	}
 	return tokenSet, nil
 }
 

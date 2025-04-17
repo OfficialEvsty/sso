@@ -34,6 +34,12 @@ type RedisConfig struct {
 	SessionTTL            time.Duration `yaml:"session_ttl" env-required:"true"`
 	EmailAuthTokenTTL     time.Duration `yaml:"email_auth_token_ttl" env-default:"24h"`
 	PasswordResetTokenTTL time.Duration `yaml:"password_reset_token_ttl" env-required:"true"`
+	CacheConfig           CacheConfig   `yaml:"cache" env-required:"true"`
+}
+
+type CacheConfig struct {
+	Enabled      bool                     `yaml:"enabled"`
+	CacheKeyTTLs map[string]time.Duration `yaml:"cache_key_ttls"`
 }
 
 type TokenConfig struct {

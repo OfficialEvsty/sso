@@ -2,19 +2,19 @@ package cached
 
 import (
 	"context"
-	"github.com/redis/go-redis/v9"
 	"sso/internal/domain/models"
 	"sso/internal/storage/postgres"
+	redis2 "sso/internal/storage/redis"
 )
 
 // TokenCachedRepository cached repository allows gets/sets sessions
 type TokenCachedRepository struct {
 	db    *postgres.ExtPool
-	cache *redis.Client
+	cache *redis2.CacheWrapper
 }
 
 // NewTokenCachedRepository creates an instance of TokenCachedRepository
-func NewTokenCachedRepository(db *postgres.ExtPool, cache *redis.Client) *TokenCachedRepository {
+func NewTokenCachedRepository(db *postgres.ExtPool, cache *redis2.CacheWrapper) *TokenCachedRepository {
 	return &TokenCachedRepository{
 		db:    db,
 		cache: cache,

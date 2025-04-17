@@ -4,20 +4,20 @@ import (
 	"context"
 	"errors"
 	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
 	"sso/internal/storage"
 	"sso/internal/storage/postgres"
+	redis2 "sso/internal/storage/redis"
 )
 
 // UserScopeRepository provides get/set and check allowed scope for specified user
 // Cached scope for TokenExchange
 type UserScopeRepository struct {
-	cache *redis.Client
+	cache *redis2.CacheWrapper
 	db    *postgres.ExtPool
 }
 
 // NewUserScopeRepository creates a new instance of UserScopeRepository
-func NewUserScopeRepository(db *postgres.ExtPool, cache *redis.Client) *UserScopeRepository {
+func NewUserScopeRepository(db *postgres.ExtPool, cache *redis2.CacheWrapper) *UserScopeRepository {
 	return &UserScopeRepository{cache: cache, db: db}
 }
 

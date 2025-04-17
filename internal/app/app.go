@@ -39,7 +39,7 @@ func New(
 	authorizationCodeTTL time.Duration,
 ) *App {
 	storage, err := postgres.New(storagePath)
-	cache, err := redis.NewCache(&redisConfig, useCache)
+	cache, err := redis.NewCache(&redisConfig)
 	//	cashedStorage := cached_postgres.NewCachedStorage(storage, cache)
 	mailService, err := mail.NewMailClient(log)
 

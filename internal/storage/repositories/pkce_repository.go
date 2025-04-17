@@ -59,12 +59,11 @@ func (r *PKCERepository) RemovePKCE(
 	ctx context.Context,
 	sessionID string,
 ) (err error) {
-	var id interface{}
-	err = r.db.QueryRow(
+	_, err = r.db.Exec(
 		ctx,
 		`DELETE FROM pkces WHERE session_id = $1`,
 		sessionID,
-	).Scan(&id)
+	)
 	if err != nil {
 		return fmt.Errorf("remove PKCE: %w", err)
 	}

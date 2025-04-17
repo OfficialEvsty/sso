@@ -7,20 +7,30 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/redis/go-redis/v9"
 	"sso/internal/domain/models"
 	"sso/internal/storage"
 	"sso/internal/storage/postgres"
+	redis2 "sso/internal/storage/redis"
+)
+
+// Redis keys
+// -- s: Session
+// -- us: User Session (Active session)
+// -- sm: Session's metadata
+const (
+	sessionKey         = "s"
+	userSessionKey     = "us"
+	sessionMetadataKey = "sm"
 )
 
 // SessionCachedRepository cached repository allows gets/sets sessions
 type SessionCachedRepository struct {
 	db    *postgres.ExtPool
-	cache *redis.Client
+	cache *redis2.CacheWrapper
 }
 
 // NewSessionCachedRepository creates an instance of SessionCachedRepository
-func NewSessionCachedRepository(db *postgres.ExtPool, cache *redis.Client) *SessionCachedRepository {
+func NewSessionCachedRepository(db *postgres.ExtPool, cache *redis2.CacheWrapper) *SessionCachedRepository {
 	return &SessionCachedRepository{
 		db:    db,
 		cache: cache,
@@ -28,7 +38,10 @@ func NewSessionCachedRepository(db *postgres.ExtPool, cache *redis.Client) *Sess
 }
 
 // Session gets unauthenticated session models.OAuthSession from db
+// LazyLoad pattern
 func (r *SessionCachedRepository) Session(ctx context.Context, sessionID string) (*models.OAuthSession, error) {
+	// try to get session from cache
+
 	var session models.OAuthSession
 	// todo make a cache getter
 	err := r.db.QueryRow(
@@ -167,6 +180,21 @@ func (r *SessionCachedRepository) RemoveAllUserSessions(ctx context.Context, use
 		ctx,
 		`DELETE FROM sessions WHERE id IN (SELECT session_id FROM user_sessions WHERE user_id = $1)`,
 		userID,
+	)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("error while deleting already exists user's sessions: %w", err)
+		}
+	}
+	return nil
+}
+
+// RemoveSessionMetadata clears metadata after end of token exchanging
+func (r *SessionCachedRepository) RemoveSessionMetadata(ctx context.Context, sessionID string) error {
+	_, err := r.db.Exec(
+		ctx,
+		`DELETE FROM session_metadata WHERE session_id = $1`,
+		sessionID,
 	)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {

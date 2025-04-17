@@ -17,6 +17,15 @@ redis:
   session_ttl: 15m
   email_auth_token_ttl: 24h
   password_reset_token_ttl: 1h
+  cache:
+    enabled: true
+    cache_key_ttls:
+      default: 25m
+      s: 12h     #session ttl
+      us: 12h    #user session ttl
+      sm: 5m    #session's metadata ttl
+      rt: 12h   #refresh token ttl
+      as: 30m   #allowed scope ttl
 jwt:
   token_ttls:
     0: 1h
