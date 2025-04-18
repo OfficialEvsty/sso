@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/redis/go-redis/v9"
 	"sso/internal/config"
 	"sso/internal/domain/models"
@@ -16,13 +17,51 @@ import (
 var (
 	InfoCacheDisabled = errors.New("info cache is disabled")
 	ErrKeyNotFound    = errors.New("key not found")
+	ErrTagNotFound    = errors.New("tag not found")
 )
+
+// TaggedProvider is an interface to provide stringing tags operation on cache key
+type TaggedProvider interface {
+	AddTag(tag string) *Tagged
+	Err() error
+}
+
+type Tagged struct {
+	cache         *CacheWrapper
+	key           string
+	ctx           context.Context
+	previousError error
+}
+
+// NewTagged creates an instance of Tagged entity
+func NewTagged(cache *CacheWrapper, key string, ctx context.Context, pError error) *Tagged {
+	return &Tagged{
+		cache:         cache,
+		key:           key,
+		ctx:           ctx,
+		previousError: pError,
+	}
+}
+
+// AddTag is an implementation of method Tagger's interface AddTag
+func (t *Tagged) AddTag(tag string) *Tagged {
+	if t.previousError != nil || t.key == "" {
+		return t
+	}
+	t.cache.SAdd(t.ctx, t.key, tag)
+	return t
+}
+
+func (t *Tagged) Err() error {
+	return t.previousError
+}
 
 // CacheWrapper custom wrapper
 type CacheWrapper struct {
 	*redis.Client
 	enabled bool
 	keysTTL map[string]time.Duration
+	timeout time.Duration
 }
 
 // Enabled Getter
@@ -37,6 +76,78 @@ func (w *CacheWrapper) KeyTTL(key string) time.Duration {
 		return w.keysTTL["default"]
 	}
 	return ttl
+}
+
+// Set async writes model's data into cache with ttl and key
+// Throws error InfoCacheDisabled if caches disabled,
+func (w *CacheWrapper) Set(key string, data interface{}, ttlKey string) TaggedProvider {
+	if !w.enabled {
+		return NewTagged(w, key, nil, InfoCacheDisabled)
+	}
+	cacheCtx := context.Background()
+	go func() {
+		if err := w.Client.Set(cacheCtx, key, data, w.KeyTTL(ttlKey)).Err(); err != nil {
+		}
+	}()
+	return NewTagged(w, key, cacheCtx, nil)
+}
+
+// Get receive early written data model from cache by key
+// Throws error InfoCacheDisabled if caches disabled,
+// Throws error ErrKeyNotFound if specified key not presented in cache
+func (w *CacheWrapper) Get(ctx context.Context, key string, dest interface{}) error {
+	if !w.enabled {
+		return InfoCacheDisabled
+	}
+	data, err := w.Client.Get(ctx, key).Bytes()
+	if err != nil {
+		return ErrKeyNotFound
+	}
+
+	if err = json.Unmarshal(data, &dest); err != nil {
+		return fmt.Errorf("error while unmarshaling json data into struct %s: %w", key, err)
+	}
+	return nil
+}
+
+// Invalidate deletes cache key if src data
+// Throws error InfoCacheDisabled if caches disabled,
+func (w *CacheWrapper) Invalidate(key string) error {
+	if !w.enabled {
+		return InfoCacheDisabled
+	}
+	go func() {
+		ctxCache, cancel := context.WithTimeout(context.Background(), w.timeout*time.Second)
+		defer cancel()
+		if err := w.Client.Del(ctxCache, key).Err(); err != nil {
+
+		}
+	}()
+	return nil
+}
+
+// InvalidateByTag deletes group keys union by specified tag
+// Throws error InfoCacheDisabled if caches disabled
+func (w *CacheWrapper) InvalidateByTag(tag string) error {
+	if !w.enabled {
+		return InfoCacheDisabled
+	}
+	go func() {
+		ctxCache, cancel := context.WithTimeout(context.Background(), w.timeout*time.Second)
+		defer cancel()
+		keys, err := w.Client.SMembers(ctxCache, tag).Result()
+		if err != nil {
+			return
+		}
+		if len(keys) == 0 {
+			return
+		}
+		for _, key := range keys {
+			if err = w.Client.Del(ctxCache, key).Err(); err != nil {
+			}
+		}
+	}()
+	return nil
 }
 
 // Cache using redis provides fast access to important and reusing data
@@ -70,6 +181,7 @@ func NewCache(conf *config.RedisConfig) (*Cache, error) {
 		Client:  rdb,
 		enabled: conf.CacheConfig.Enabled,
 		keysTTL: conf.CacheConfig.CacheKeyTTLs,
+		timeout: 5 * time.Second,
 	},
 		sessionTTL:            conf.SessionTTL,
 		emailAuthTokenTTL:     conf.EmailAuthTokenTTL,

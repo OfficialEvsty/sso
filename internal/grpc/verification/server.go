@@ -18,6 +18,12 @@ func Register(gRPC *grpc.Server, verification *verification.Verification) {
 	ssov1.RegisterVerificationServiceServer(gRPC, &verificationServer{verification: *verification})
 }
 
+// JWKS returns list of public keys to verify token's signature on client side
+func (v *verificationServer) JWKS(ctx context.Context, req *ssov1.GetJwksRequest) (*ssov1.GetJwksResponse, error) {
+	resp := &ssov1.GetJwksResponse{}
+	for kid, pubKey :=
+}
+
 // SaveEmailToken handler
 func (v *verificationServer) SaveEmailToken(ctx context.Context, req *ssov1.SaveEmailTokenRequest) (*ssov1.SaveEmailTokenResponse, error) {
 	if req.GetToken() == "" {

@@ -31,3 +31,13 @@ tasks:
       dbname: '{{.dbname| default "sso_db"}}'
     cmds:
       - psql {{.provider}}{{.user}}:{{.pass}}@{{.host}}:{{.port}}/{{.dbname}}?sslmode=disable
+
+  redis-connect:
+    aliases:
+      - rc
+    desc: "Connection to redis"
+    vars:
+      host: '{{.host| default "localhost"}}'
+      port: '{{.port| default "6380"}}'
+    cmds:
+      - redis-cli -h {{.host}} -p {{.port}}

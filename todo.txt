@@ -1,0 +1,15 @@
+1.  -- important
+        Сделать дополнительный запрос на эндпоинт /token grant_type: refresh_token
+            1. Его формат:
+                message RefreshTokenGrant {
+                    string refresh_token = 1; (rotate on refresh)
+                    string client_id = 2;
+                    string client_secret = ..; (optional if pkce implemented)
+                    string grant_type = 3;
+                }
+            2. Обязательно осуществлять ротацию при использовании refresh_token
+
+        Сделать эндпоинт для получения json файла с публичными ключами для верификации подписи на стороне клиента
+2.  -- perfect
+        Сделать доступ к vault хранилищу по role_id secret_id
+        Сделать конфигурации паттерном фасад

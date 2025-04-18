@@ -9,6 +9,12 @@ import (
 	redis2 "sso/internal/storage/redis"
 )
 
+// Redis keys
+// -- as: allowed scope
+const (
+	allowedScopeKey = "as"
+)
+
 // UserScopeRepository provides get/set and check allowed scope for specified user
 // Cached scope for TokenExchange
 type UserScopeRepository struct {
@@ -52,6 +58,7 @@ func (r *UserScopeRepository) AllowedUserScope(
 		}
 		roles = append(roles, roleName)
 	}
+
 	return roles, nil
 }
 

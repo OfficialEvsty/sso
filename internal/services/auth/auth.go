@@ -442,7 +442,7 @@ func (a *Auth) Login(
 		logger.Info("user added new trusted ip")
 	}
 	// deletes previous authenticated sessions
-	err = a.sessionStorage.RemoveAllUserSessions(ctx, user.ID)
+	err = a.sessionStorage.RemoveAllUserSessionsExceptCurrent(ctx, user.ID, sessionID)
 	if err != nil {
 		return "", err
 	}
