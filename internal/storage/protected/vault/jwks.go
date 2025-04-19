@@ -2,33 +2,36 @@ package vault
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"github.com/lestrrat-go/jwx/jwk"
 	"sso/internal/storage/protected"
 	"strings"
 )
 
-// SignProvider interface allows sign a JWT and give upon request a Public Key
-type SignProvider interface {
+// JwkProvider interface allows sign a JWT and give upon request a Public Key
+type JwkProvider interface {
 	SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error)
 	RotateKey(ctx context.Context) error
-	PublicKey(ctx context.Context, version string) (string, error)
+	PublicKeys(ctx context.Context) ([]byte, error)
 	LatestKeyVersion(ctx context.Context) (int, error)
 }
 
-// SignController is a concrete implementation of SignProvider interface
-type SignController struct {
+// JwkManager is a concrete implementation of SignProvider interface
+type JwkManager struct {
 	v *protected.Vault
 }
 
 // NewSignController creates a new instance of Signer
-func NewSignController(client *protected.Vault) *SignController {
-	return &SignController{v: client}
+func NewSignController(client *protected.Vault) *JwkManager {
+	return &JwkManager{v: client}
 }
 
 // LatestKeyVersion gets the latest key version with proper error handling
-func (s *SignController) LatestKeyVersion(ctx context.Context) (int, error) {
+func (s *JwkManager) LatestKeyVersion(ctx context.Context) (int, error) {
 	secret, err := s.v.Client.Read(ctx, "transit/keys/jwt_keys")
 	if err != nil {
 		return 0, fmt.Errorf("failed to read key: %w", err)
@@ -57,7 +60,7 @@ func (s *SignController) LatestKeyVersion(ctx context.Context) (int, error) {
 }
 
 // SignJWT signs a JWT with improved error handling
-func (s *SignController) SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error) {
+func (s *JwkManager) SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error) {
 	header := map[string]interface{}{
 		"alg": "RS256",
 		"typ": "JWT",
@@ -107,7 +110,7 @@ func (s *SignController) SignJWT(ctx context.Context, claims map[string]interfac
 }
 
 // RotateKey rotates the key pair with error handling
-func (s *SignController) RotateKey(ctx context.Context) error {
+func (s *JwkManager) RotateKey(ctx context.Context) error {
 	_, err := s.v.Client.Write(ctx, "transit/keys/jwt_keys/rotate", nil)
 	if err != nil {
 		return fmt.Errorf("key rotation failed: %w", err)
@@ -115,30 +118,51 @@ func (s *SignController) RotateKey(ctx context.Context) error {
 	return nil
 }
 
-// PublicKey retrieves the public key with version validation
-func (s *SignController) PublicKey(ctx context.Context, version string) (string, error) {
-	if version == "" {
-		return "", fmt.Errorf("version cannot be empty")
-	}
-
-	secret, err := s.v.Client.Read(ctx, fmt.Sprintf("transit/keys/jwt_keys/%s", version))
+// PublicKeys retrieves the public key with version validation
+func (s *JwkManager) PublicKeys(ctx context.Context) (jwk.Set, error) {
+	secret, err := s.v.Client.Read(ctx, fmt.Sprintf("transit/keys/jwt_keys"))
 	if err != nil {
-		return "", fmt.Errorf("failed to read public key: %w", err)
+		return nil, fmt.Errorf("failed to read public key: %w", err)
 	}
 
 	if secret == nil || secret.Data == nil {
-		return "", fmt.Errorf("empty response from vault")
+		return nil, fmt.Errorf("empty response from vault")
 	}
 
-	pubKeyRaw, ok := secret.Data["public_key"]
+	versions, ok := secret.Data["keys"]
 	if !ok {
-		return "", fmt.Errorf("public_key missing in response")
+		return nil, fmt.Errorf("public_key missing in response")
+	}
+	set := jwk.NewSet()
+	for ver, keyData := range versions.(map[string]interface{}) {
+		data := keyData.(map[string]interface{})
+		pemKey := data["public_key"].(string)
+		jwk_, err := convertPemToJwk(pemKey, ver)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert public key: %w", err)
+		}
+		set.Add(jwk_)
+	}
+	return set, nil
+}
+
+func convertPemToJwk(pemKey string, ver string) (jwk.Key, error) {
+	// converting to jwk format
+	block, _ := pem.Decode([]byte(pemKey))
+	if block == nil {
+		return nil, fmt.Errorf("invalid public key format")
 	}
 
-	pubKey, ok := pubKeyRaw.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid public key format")
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %w", err)
 	}
 
-	return pubKey, nil
+	jwkKey, err := jwk.New(pub)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JWK: %w", err)
+	}
+
+	_ = jwkKey.Set(jwk.KeyIDKey, ver) // key id
+	return jwkKey, nil
 }

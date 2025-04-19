@@ -64,7 +64,6 @@ func (r *ValidationRepository) TokenArgsValidate(ctx context.Context,
 	redirectUri string,
 	verifier string,
 	sessionID string,
-	grantType string,
 ) (err error) {
 	err = r.validateClientID(ctx, clientID)
 	if err != nil {

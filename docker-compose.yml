@@ -22,8 +22,8 @@ services:
       timeout: 10s
       retries: 3
     volumes:
-      - ./internal/storage/protected/vault/entrypoint.sh:/vault/entrypoint.sh # Монтируем скрипт точки входа
-      - ./internal/storage/protected/vault/scripts:/scripts  # Монтируем скрипт инициализации
+      - /internal/storage/protected/vault/entrypoint.sh:/vault/entrypoint.sh # Монтируем скрипт точки входа
+      - /internal/storage/protected/vault/scripts:/scripts  # Монтируем скрипт инициализации
     cap_add:
       - IPC_LOCK
     networks:

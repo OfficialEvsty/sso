@@ -68,33 +68,41 @@ func Register(gRPC *grpc.Server, auth *auth.Auth, verification *verification.Ver
 // Receive ID, Access and Refresh tokens signed by private key of RS256 method
 func (s *serverAPI) Token(ctx context.Context, req *ssov1.TokenRequest) (*ssov1.TokenResponse, error) {
 	// check preconditions (fields MUST NOT be empty)
-	err := validateTokenRequestOnEmptyFields(req)
-	if err != nil {
-		return nil, err
-	}
-	set, err := s.auth.Token(
-		ctx,
-		req.GetAuthCode(),
-		req.GetGrantType(),
-		req.GetRedirectUri(),
-		req.GetCodeVerifier(),
-		req.GetClientId(),
-	)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
+	switch req.GrantType.(type) {
+	case *ssov1.TokenRequest_AuthorizationCode:
+		authCodeReq := req.GetAuthorizationCode()
+		err := validateAuthorizationCodeOnEmptyFields(authCodeReq)
+		if err != nil {
+			return nil, err
+		}
+		set, err := s.auth.Token(
+			ctx,
+			authCodeReq.GetAuthCode(),
+			authCodeReq.GetRedirectUri(),
+			authCodeReq.GetCodeVerifier(),
+			authCodeReq.GetClientId(),
+		)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
 
-	return &ssov1.TokenResponse{
-		IdToken:      set.ID.Token,
-		AccessToken:  set.Access.Token,
-		RefreshToken: set.Refresh.Token,
-		ExpiresIn:    uint32(set.Access.ExpiresAt.Unix()),
-		TokenType:    "Bearer",
-	}, nil
+		return &ssov1.TokenResponse{
+			IdToken:      set.ID.Token,
+			AccessToken:  set.Access.Token,
+			RefreshToken: set.Refresh.Token,
+			ExpiresIn:    uint32(set.Access.ExpiresAt.Unix()),
+			TokenType:    "Bearer",
+		}, nil
+	case *ssov1.TokenRequest_RefreshToken:
+		//refreshReq := req.GetRefreshToken()
+		return nil, status.Error(codes.Unimplemented, "currently unimplemented")
+	default:
+		return nil, status.Error(codes.NotFound, "unsupported")
+	}
 }
 
 // validateTokenRequestOnEmptyFields validates token request on empty fields
-func validateTokenRequestOnEmptyFields(req *ssov1.TokenRequest) error {
+func validateAuthorizationCodeOnEmptyFields(req *ssov1.AuthorizationCodeGrant) error {
 	if req.GetClientId() == "" {
 		return status.Error(codes.InvalidArgument, "client id is empty")
 	}
@@ -106,9 +114,6 @@ func validateTokenRequestOnEmptyFields(req *ssov1.TokenRequest) error {
 	}
 	if req.GetCodeVerifier() == "" {
 		return status.Error(codes.InvalidArgument, "code verifier is empty")
-	}
-	if req.GetGrantType() == "" {
-		return status.Error(codes.InvalidArgument, "grant type is empty")
 	}
 	return nil
 }

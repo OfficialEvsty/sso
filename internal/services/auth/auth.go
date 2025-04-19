@@ -240,15 +240,14 @@ func (a *Auth) TokenArgsValidate(
 	redirectUri string,
 	codeVerifier string,
 	sessionID string,
-	grant string,
 ) (err error) {
-	return a.requestValidator.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID, grant)
+	return a.requestValidator.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID)
 }
 
 // Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
 // OAuth2.1 specification method
 // Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
-func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirectUri string, codeVerifier string, clientID string) (set *tokens.TokenSet, err error) {
+func (a *Auth) Token(ctx context.Context, authCode string, redirectUri string, codeVerifier string, clientID string) (set *tokens.TokenSet, err error) {
 	const op = "auth.Token"
 	aud := "currently unimplemented"
 	logger := a.log.With(slog.String("op", op))
@@ -259,7 +258,7 @@ func (a *Auth) Token(ctx context.Context, authCode string, grant string, redirec
 		return nil, err
 	}
 	// validates args: hash codeVerifier, checks redirect uri, authCode and clientID
-	err = a.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID, grant)
+	err = a.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID)
 	if err != nil {
 		return set, err
 	}

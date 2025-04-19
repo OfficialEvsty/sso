@@ -15,13 +15,13 @@ import (
 
 // TokenProvider creates different token types
 type TokenProvider struct {
-	sign   *vault.SignController
+	sign   *vault.JwkManager
 	claims ClaimsController
 	TTLs   map[config.TokenType]time.Duration
 }
 
 // NewTokenProvider creates new instance of TokenProvider
-func NewTokenProvider(sign *vault.SignController, config config.TokenConfig) *TokenProvider {
+func NewTokenProvider(sign *vault.JwkManager, config config.TokenConfig) *TokenProvider {
 	return &TokenProvider{
 		sign:   sign,
 		claims: NewClaimsController(config.AllowedClaims),

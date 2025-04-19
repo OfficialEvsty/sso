@@ -95,6 +95,7 @@ func New(
 		cache,
 		cache,
 		storage,
+		*vaultStorage,
 	)
 
 	grpcApp := grpcapp.New(env, log, authService, sessionService, accessService, verificationService, mailService, grpcPort)

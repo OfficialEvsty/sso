@@ -2,7 +2,9 @@ package verification
 
 import (
 	"context"
+	"encoding/base64"
 	ssov1 "github.com/OfficialEvsty/protos/gen/go/sso"
+	"github.com/lestrrat-go/jwx/jwk"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -20,8 +22,33 @@ func Register(gRPC *grpc.Server, verification *verification.Verification) {
 
 // JWKS returns list of public keys to verify token's signature on client side
 func (v *verificationServer) JWKS(ctx context.Context, req *ssov1.GetJwksRequest) (*ssov1.GetJwksResponse, error) {
-	resp := &ssov1.GetJwksResponse{}
-	for kid, pubKey :=
+	keySet, err := v.verification.GetJwks(ctx)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	var jwks []*ssov1.Jwk
+	for i := range keySet.Len() {
+		key, ok := keySet.Get(i)
+		if !ok {
+			return nil, status.Error(codes.Internal, "key not found")
+		}
+		if rsaKey, ok := key.(jwk.RSAPublicKey); ok {
+			// Base64URL-encode N (modulus) and E (exponent) without padding
+			nBase64 := base64.RawURLEncoding.EncodeToString(rsaKey.N())
+			eBase64 := base64.RawURLEncoding.EncodeToString(rsaKey.E())
+			jwks = append(jwks, &ssov1.Jwk{
+				Kty: key.KeyType().String(),
+				Kid: key.KeyID(),
+				Alg: key.Algorithm(),
+				N:   nBase64,
+				E:   eBase64,
+			})
+		}
+	}
+	resp := &ssov1.GetJwksResponse{
+		Keys: jwks,
+	}
+	return resp, nil
 }
 
 // SaveEmailToken handler

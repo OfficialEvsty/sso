@@ -2,9 +2,11 @@ package verification
 
 import (
 	"context"
+	"github.com/lestrrat-go/jwx/jwk"
 	"log/slog"
 	interfaces2 "sso/internal/services/auth/interfaces"
 	"sso/internal/services/verification/interfaces"
+	"sso/internal/storage/protected/vault"
 	"strings"
 )
 
@@ -14,6 +16,7 @@ type Verification struct {
 	tokenStorage interfaces.VerificationTokenStorage
 	provider     interfaces.VerificationProvider
 	userProvider interfaces2.UserProvider
+	jwkManager   vault.JwkManager
 }
 
 // New creates an instance of Verification service
@@ -23,6 +26,7 @@ func New(
 	tokenStorage interfaces.VerificationTokenStorage,
 	provider interfaces.VerificationProvider,
 	userProvider interfaces2.UserProvider,
+	jwkManager vault.JwkManager,
 ) *Verification {
 	return &Verification{
 		log:          logger,
@@ -30,7 +34,16 @@ func New(
 		tokenStorage: tokenStorage,
 		provider:     provider,
 		userProvider: userProvider,
+		jwkManager:   jwkManager,
 	}
+}
+
+// GetJwks retrieves JWKs
+func (v *Verification) GetJwks(ctx context.Context) (jwk.Set, error) {
+	op := "verification.GetJwks"
+	logger := v.log.With("op", op)
+	logger.Debug("extracts jwks from vault")
+	return v.jwkManager.PublicKeys(ctx)
 }
 
 // SaveEmailToken writes token data in storage
