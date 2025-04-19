@@ -7,31 +7,39 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/lestrrat-go/jwx/jwa"
 	"github.com/lestrrat-go/jwx/jwk"
 	"sso/internal/storage/protected"
+	"sso/internal/storage/redis"
 	"strings"
 )
 
-// JwkProvider interface allows sign a JWT and give upon request a Public Key
-type JwkProvider interface {
-	SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error)
-	RotateKey(ctx context.Context) error
-	PublicKeys(ctx context.Context) ([]byte, error)
-	LatestKeyVersion(ctx context.Context) (int, error)
-}
-
 // JwkManager is a concrete implementation of SignProvider interface
 type JwkManager struct {
-	v *protected.Vault
+	v     *protected.Vault
+	cache *redis.CacheWrapper
 }
 
+const (
+	publicKeysCacheKey        = "jwk:pk"
+	latestKeyVersionsCacheKey = "jwk:latest_version"
+)
+
 // NewSignController creates a new instance of Signer
-func NewSignController(client *protected.Vault) *JwkManager {
-	return &JwkManager{v: client}
+func NewSignController(client *protected.Vault, cache *redis.CacheWrapper) *JwkManager {
+	return &JwkManager{v: client, cache: cache}
 }
 
 // LatestKeyVersion gets the latest key version with proper error handling
 func (s *JwkManager) LatestKeyVersion(ctx context.Context) (int, error) {
+	// firstly try get from cache
+	var version int64
+	cacheKey := fmt.Sprintf("%s", latestKeyVersionsCacheKey)
+	err := s.cache.Get(ctx, cacheKey, version)
+	if err == nil {
+		return int(version), nil
+	}
+
 	secret, err := s.v.Client.Read(ctx, "transit/keys/jwt_keys")
 	if err != nil {
 		return 0, fmt.Errorf("failed to read key: %w", err)
@@ -51,10 +59,12 @@ func (s *JwkManager) LatestKeyVersion(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("invalid version format")
 	}
 
-	version, err := versionNum.Int64()
+	version, err = versionNum.Int64()
 	if err != nil {
 		return 0, fmt.Errorf("version conversion failed: %w", err)
 	}
+
+	s.cache.Set(cacheKey, version, "default")
 
 	return int(version), nil
 }
@@ -115,11 +125,20 @@ func (s *JwkManager) RotateKey(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("key rotation failed: %w", err)
 	}
+
+	_ = s.cache.Invalidate(latestKeyVersionsCacheKey)
 	return nil
 }
 
 // PublicKeys retrieves the public key with version validation
 func (s *JwkManager) PublicKeys(ctx context.Context) (jwk.Set, error) {
+	// firstly try to get jwk.Set from cache
+	var set jwk.Set
+	cacheKey := fmt.Sprintf("%s", publicKeysCacheKey)
+	if err := s.cache.Get(ctx, cacheKey, &set); err == nil {
+		return set, nil
+	}
+
 	secret, err := s.v.Client.Read(ctx, fmt.Sprintf("transit/keys/jwt_keys"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read public key: %w", err)
@@ -133,7 +152,7 @@ func (s *JwkManager) PublicKeys(ctx context.Context) (jwk.Set, error) {
 	if !ok {
 		return nil, fmt.Errorf("public_key missing in response")
 	}
-	set := jwk.NewSet()
+	set = jwk.NewSet()
 	for ver, keyData := range versions.(map[string]interface{}) {
 		data := keyData.(map[string]interface{})
 		pemKey := data["public_key"].(string)
@@ -143,6 +162,9 @@ func (s *JwkManager) PublicKeys(ctx context.Context) (jwk.Set, error) {
 		}
 		set.Add(jwk_)
 	}
+
+	// sets cache key if previously unset
+	s.cache.Set(cacheKey, set, "default")
 	return set, nil
 }
 
@@ -163,6 +185,7 @@ func convertPemToJwk(pemKey string, ver string) (jwk.Key, error) {
 		return nil, fmt.Errorf("failed to create JWK: %w", err)
 	}
 
-	_ = jwkKey.Set(jwk.KeyIDKey, ver) // key id
+	_ = jwkKey.Set(jwk.KeyIDKey, ver)           // key id
+	_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256) // alg: RS256
 	return jwkKey, nil
 }

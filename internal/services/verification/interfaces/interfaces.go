@@ -5,6 +5,14 @@ import (
 	"sso/internal/domain/models"
 )
 
+// JwkProvider interface allows sign a JWT and give upon request a Public Key
+type JwkProvider interface {
+	SignJWT(ctx context.Context, claims map[string]interface{}, keyVersion int) (string, error)
+	RotateKey(ctx context.Context) error
+	LatestKeyVersion(ctx context.Context) (int, error)
+	PublicKeys(ctx context.Context) ([]byte, error)
+}
+
 // VerificationStorage writes a token in storage
 type VerificationStorage interface {
 	SaveVerifiedUserEmail(ctx context.Context, userID int64, email string) error

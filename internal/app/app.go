@@ -44,7 +44,7 @@ func New(
 	mailService, err := mail.NewMailClient(log)
 
 	vault, err := protected.NewVaultClient()
-	vaultStorage := vault2.NewSignController(vault)
+	vaultStorage := vault2.NewSignController(vault, cache.GetConnection())
 	tokenProvider := jwt.NewTokenProvider(vaultStorage, tokenConfig)
 
 	// validation repositories
