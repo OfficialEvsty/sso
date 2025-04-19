@@ -20,8 +20,8 @@ func Register(gRPC *grpc.Server, verification *verification.Verification) {
 	ssov1.RegisterVerificationServiceServer(gRPC, &verificationServer{verification: *verification})
 }
 
-// JWKS returns list of public keys to verify token's signature on client side
-func (v *verificationServer) JWKS(ctx context.Context, req *ssov1.GetJwksRequest) (*ssov1.GetJwksResponse, error) {
+// GetJwks returns list of public keys to verify token's signature on client side
+func (v *verificationServer) GetJwks(ctx context.Context, req *ssov1.GetJwksRequest) (*ssov1.GetJwksResponse, error) {
 	keySet, err := v.verification.GetJwks(ctx)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

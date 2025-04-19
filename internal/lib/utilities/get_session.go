@@ -2,7 +2,6 @@ package utilities
 
 import (
 	"context"
-	"errors"
 	"google.golang.org/grpc/metadata"
 	"log/slog"
 	"sso/internal/storage"
@@ -20,7 +19,7 @@ func GetUserSession(ctx context.Context, logger *slog.Logger) (string, error) {
 	sessionIDs := md.Get("session_cookie")
 	if len(sessionIDs) == 0 {
 		logger.Error("no session found in metadata, cause gateway problem with setup necessary session key")
-		return "", errors.New("no session cookie found")
+		return "", storage.InfoSessionNotFound
 	}
 	sessionID := sessionIDs[0]
 	// if session haven't provided

@@ -143,9 +143,10 @@ func (s *serverAPI) Authorize(ctx context.Context, req *ssov1.AuthorizeRequest) 
 		if errors.Is(err, storage.ErrNoMetadataContext) {
 			return nil, status.Error(codes.InvalidArgument, "no metadata context by specified key")
 		}
-		if !errors.Is(err, storage.InfoUserUnauthenticated) {
+		if !(errors.Is(err, storage.InfoUserUnauthenticated) || errors.Is(err, storage.InfoSessionNotFound)) {
 			return nil, status.Error(codes.Internal, err.Error())
 		}
+
 		// todo delete all user's sessions when redirect on login form
 		sessionID, loginUri, err := s.auth.AuthorizeByLogin(ctx, req.GetClientId(), req.GetRedirectUri(), validScope, pkce, req.GetState())
 		return &ssov1.AuthorizeResponse{
