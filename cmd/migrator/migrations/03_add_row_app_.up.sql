@@ -1,2 +1,2 @@
-INSERT INTO apps (name, redirect_uri, secret) VALUES ('uMaiden-app', 'https://teamspot.online/redirect', 'evsty-theloh-mourka');
+INSERT INTO apps (name, redirect_uri, secret) VALUES ('uMaiden-app', 'https://umaiden.ru/redirect', 'umaid');
 INSERT INTO apps (name, redirect_uri, secret) VALUES ('gaming-board','https://teamspot.online/redirect', 'gaming');

@@ -94,7 +94,7 @@ func (s *serverAPI) Token(ctx context.Context, req *ssov1.TokenRequest) (*ssov1.
 			TokenType:    "Bearer",
 		}, nil
 	case *ssov1.TokenRequest_RefreshToken:
-		//refreshReq := req.GetRefreshToken()
+		refreshReq := req.GetRefreshToken()
 		return nil, status.Error(codes.Unimplemented, "currently unimplemented")
 	default:
 		return nil, status.Error(codes.NotFound, "unsupported")

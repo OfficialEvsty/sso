@@ -95,3 +95,7 @@ func (r *TokenCachedRepository) RevokeRefreshToken(ctx context.Context, refreshT
 	_ = r.cache.Invalidate(cacheKey)
 	return nil
 }
+
+func (r *TokenCachedRepository) UpdateRefreshToken(ctx context.Context, refreshToken string) error {
+	_, 
+}

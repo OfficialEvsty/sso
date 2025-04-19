@@ -12,6 +12,7 @@ import (
 	"sso/internal/app/interceptors"
 	"sso/internal/domain/models"
 	"sso/internal/lib/utilities"
+	"sso/internal/storage"
 	"sso/internal/storage/postgres"
 	"strings"
 )
@@ -80,6 +81,14 @@ func (r *ValidationRepository) TokenArgsValidate(ctx context.Context,
 	}
 	err = r.validatePKCE(ctx, sessionID, verifier)
 	return nil
+}
+
+// RefreshTokenArgsValidate validate if client provided valid input data to refresh Access Token
+func (r *ValidationRepository) RefreshTokenArgsValidate(ctx context.Context,
+	clientID interface{},
+	clientSecret string,
+) (err error) {
+	return r.validateClientCredentials(ctx, clientID, clientSecret)
 }
 
 // validateScope checks which claims are valid for specified client
@@ -213,5 +222,23 @@ func (r *ValidationRepository) validatePKCE(ctx context.Context, sessionID strin
 		return errors.New("pkce validation failed: code verifier does not match challenge")
 	}
 
+	return nil
+}
+
+// validateClientCredentials validates provided client's credentials
+func (r *ValidationRepository) validateClientCredentials(ctx context.Context, clientID interface{}, clientSecret string) error {
+	var id int32
+	err := r.db.QueryRow(
+		ctx,
+		`SELECT * FROM apps WHERE id = $1 AND secret = $2`,
+		clientID.(string),
+		clientSecret,
+	).Scan(&id)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return storage.ErrInvalidClientCredentials
+		}
+		return fmt.Errorf("error while validating client credentials: %w", err)
+	}
 	return nil
 }

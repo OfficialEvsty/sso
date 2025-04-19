@@ -244,6 +244,19 @@ func (a *Auth) TokenArgsValidate(
 	return a.requestValidator.TokenArgsValidate(ctx, clientID, redirectUri, codeVerifier, sessionID)
 }
 
+func (a *Auth) RefreshTokenArgsValidate(
+	ctx context.Context,
+	clientID interface{},
+	clientSecret string,
+) (err error) {
+	const op = "auth.RefreshTokenArgsValidate"
+	logger := a.log.With(slog.String("op", op))
+	logger.Debug("starts validating refresh token args...")
+	err = a.requestValidator.RefreshTokenArgsValidate(ctx, clientID, clientSecret)
+	logger.Info("successfully validated refresh token args")
+	return err
+}
+
 // Token exchange models.AuthorizationCode on set of tokens: ID Token, AccessToken, RefreshToken aggregated in models.OAuthTokenSet
 // OAuth2.1 specification method
 // Validates authorization code, redirect uri, code verifier, after that generates three tokens, signed by client secret
@@ -337,6 +350,86 @@ func (a *Auth) Token(ctx context.Context, authCode string, redirectUri string, c
 		return nil, fmt.Errorf("error removing pkce: %w", err)
 	}
 	return tokenSet, nil
+}
+
+// RefreshToken refreshes AccessToken by RefreshToken and rotates it
+// OAuth2.1 specification method
+// Validates refresh token, client id and client secret
+func (a *Auth) RefreshToken(ctx context.Context, token string, clientID interface{}, clientSecret string) (set *tokens.TokenSet, err error) {
+	const op = "auth.RefreshToken"
+	logger := a.log.With(slog.String("op", op))
+	logger.Debug("starts refreshing tokens set...")
+	// validation
+	err = a.RefreshTokenArgsValidate(ctx, clientID, clientSecret)
+	if err != nil {
+		return nil, fmt.Errorf("error while validating grant_type: refresh_token, token endpoint: %w", err)
+	}
+	// checks whether exist user's authorized session (active/alive)
+	sessionID, err := utilities.GetUserSession(ctx, logger)
+	if err != nil {
+		return nil, storage.InfoSessionNotFound
+	}
+
+	refreshToken, err := a.tokenStorage.RefreshToken(ctx, token)
+	if err != nil {
+		logger.Error("error while getting refresh token: %w", err)
+		return nil, fmt.Errorf("error while refreshing token: %w", err)
+	}
+	session, err := a.sessionStorage.ActiveSession(ctx, sessionID)
+	if err != nil {
+		logger.Error("error while getting active session: %w", err)
+		return nil, fmt.Errorf("error while getting active session: %w", err)
+	}
+	if session.UserId != refreshToken.UserID {
+		logger.Warn("user's session not related to refresh token's user. (IMPORTANT)")
+		return nil, fmt.Errorf("user's session not related to refresh token's user. (IMPORTANT)")
+	}
+	// checks if session expired
+	if session.Session.ExpiresAt.Unix() < time.Now().Unix() {
+		err = a.sessionStorage.RemoveSession(ctx, sessionID)
+		if err != nil {
+			logger.With("session_id", sessionID).Error("error while removing expired session: %w", err)
+			return nil, fmt.Errorf("error while removing expired session: %w", err)
+		}
+		return nil, storage.InfoSessionExpired
+	}
+	// checks if token not expired
+	if refreshToken.ExpiresAt.Unix() < time.Now().Unix() {
+		logger.Error("refresh token expired")
+		return nil, storage.ErrTokenExpired
+	}
+	// checks if user exist
+	user, err := a.usrProvider.UserById(ctx, refreshToken.UserID)
+	if err != nil {
+		logger.Error("error while validating user: %w", err)
+		return nil, storage.ErrUserNotFound
+	}
+
+	// generating access token
+	acsToken, err := a.tokenProvider.MakeAccessToken(ctx, &user, "", session.Session.Scope)
+	if err != nil {
+		logger.Error("error generating access token: %w", err)
+		return nil, fmt.Errorf("error generating access token: %w", err)
+	}
+	// generating new refresh token
+	newRefreshToken, err := a.tokenProvider.MakeRefreshToken(user.ID)
+	if err != nil {
+		logger.Error("error generating refresh token: %w", err)
+		return nil, fmt.Errorf("error generating refresh token: %w", err)
+	}
+	err = a.tokenStorage.RemoveAllUserTokens(ctx, user.ID)
+	if err != nil {
+		logger.Error("error removing user's refresh tokens: %w", err)
+		return nil, fmt.Errorf("error removing user's refresh tokens: %w", err)
+	}
+	// if error should rollback deleting
+	err = a.tokenStorage.SaveRefreshToken(ctx, newRefreshToken)
+	if err != nil {
+		logger.Error("error saving refresh token: %w", err)
+		return nil, fmt.Errorf("error saving refresh token: %w", err)
+	}
+	// rotating refresh token
+	a.tokenStorage.
 }
 
 // Login checks if user with given credentials exists in system
