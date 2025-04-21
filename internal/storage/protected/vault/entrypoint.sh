@@ -38,7 +38,8 @@ vault secrets enable transit
 vault write transit/keys/jwt_keys \
     type=rsa-2048 \
     allowed_uses=sign,verify \
-    exportable=true
+    exportable=true \
+    allow_plaintext_backup=true
 
 echo "Secrets enabled and JWT keys created"
 # Оставляем контейнер работающим

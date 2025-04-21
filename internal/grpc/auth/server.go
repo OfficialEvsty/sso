@@ -95,7 +95,21 @@ func (s *serverAPI) Token(ctx context.Context, req *ssov1.TokenRequest) (*ssov1.
 		}, nil
 	case *ssov1.TokenRequest_RefreshToken:
 		refreshReq := req.GetRefreshToken()
-		return nil, status.Error(codes.Unimplemented, "currently unimplemented")
+		// validate on empty
+		err := validateRefreshTokenOnEmptyFields(refreshReq)
+		if err != nil {
+			return nil, err
+		}
+		set, err := s.auth.RefreshToken(ctx, refreshReq.GetRefreshToken(), refreshReq.GetClientId(), refreshReq.GetClientSecret())
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		return &ssov1.TokenResponse{
+			AccessToken:  set.Access.Token,
+			RefreshToken: set.Refresh.Token,
+			ExpiresIn:    uint32(set.Access.ExpiresAt.Unix()),
+			TokenType:    "Bearer",
+		}, nil
 	default:
 		return nil, status.Error(codes.NotFound, "unsupported")
 	}
@@ -114,6 +128,20 @@ func validateAuthorizationCodeOnEmptyFields(req *ssov1.AuthorizationCodeGrant) e
 	}
 	if req.GetCodeVerifier() == "" {
 		return status.Error(codes.InvalidArgument, "code verifier is empty")
+	}
+	return nil
+}
+
+// validateTokenRequestOnEmptyFields validates token request on empty fields
+func validateRefreshTokenOnEmptyFields(req *ssov1.RefreshTokenGrant) error {
+	if req.GetClientId() == "" {
+		return status.Error(codes.InvalidArgument, "client id is empty")
+	}
+	if req.GetRefreshToken() == "" {
+		return status.Error(codes.InvalidArgument, "token is empty")
+	}
+	if req.GetClientSecret() == "" {
+		return status.Error(codes.InvalidArgument, "client secret is empty")
 	}
 	return nil
 }

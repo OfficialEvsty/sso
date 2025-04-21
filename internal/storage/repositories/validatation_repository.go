@@ -9,9 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"sso/internal/app/interceptors"
 	"sso/internal/domain/models"
-	"sso/internal/lib/utilities"
 	"sso/internal/storage"
 	"sso/internal/storage/postgres"
 	"strings"
@@ -42,7 +40,7 @@ func (r *ValidationRepository) AuthorizeRequestValidate(ctx context.Context,
 		return "", err
 	}
 	// checks redirect uri
-	err = r.validateRedirectURI(ctx, redirectUri)
+	err = r.validateRedirectURI(ctx, clientID, redirectUri)
 	if err != nil {
 		return "", err
 	}
@@ -70,16 +68,14 @@ func (r *ValidationRepository) TokenArgsValidate(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	err = r.validateRedirectURI(ctx, redirectUri)
+	err = r.validateRedirectURI(ctx, clientID, redirectUri)
 	if err != nil {
 		return err
 	}
-	// PKCE applies only if Production mode assembly
-	env := utilities.EnvFromContext(ctx)
-	if env != interceptors.EnvProd {
-		return nil
-	}
 	err = r.validatePKCE(ctx, sessionID, verifier)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -153,12 +149,13 @@ func (r *ValidationRepository) validateClientID(ctx context.Context, clientID in
 }
 
 // checks if redirect uri correct
-func (r *ValidationRepository) validateRedirectURI(ctx context.Context, redirectUri string) error {
+func (r *ValidationRepository) validateRedirectURI(ctx context.Context, clientID interface{}, redirectUri string) error {
 	var id interface{}
 	err := r.db.QueryRow(
 		ctx,
-		`SELECT id FROM apps WHERE redirect_uri = $1`,
+		`SELECT id FROM apps WHERE redirect_uri = $1 AND id = $2`,
 		redirectUri,
+		clientID,
 	).Scan(&id)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
@@ -230,15 +227,15 @@ func (r *ValidationRepository) validateClientCredentials(ctx context.Context, cl
 	var id int32
 	err := r.db.QueryRow(
 		ctx,
-		`SELECT * FROM apps WHERE id = $1 AND secret = $2`,
+		`SELECT id FROM apps WHERE id = $1 AND secret = $2`,
 		clientID.(string),
 		clientSecret,
 	).Scan(&id)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return storage.ErrInvalidClientCredentials
+			return fmt.Errorf("error while validating client credentials: %w", err)
 		}
-		return fmt.Errorf("error while validating client credentials: %w", err)
+		return storage.ErrInvalidClientCredentials
 	}
 	return nil
 }

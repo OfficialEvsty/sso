@@ -2,6 +2,7 @@ package vault
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -35,7 +36,7 @@ func (s *JwkManager) LatestKeyVersion(ctx context.Context) (int, error) {
 	// firstly try get from cache
 	var version int64
 	cacheKey := fmt.Sprintf("%s", latestKeyVersionsCacheKey)
-	err := s.cache.Get(ctx, cacheKey, version)
+	err := s.cache.Get(ctx, cacheKey, &version)
 	if err == nil {
 		return int(version), nil
 	}
@@ -87,16 +88,27 @@ func (s *JwkManager) SignJWT(ctx context.Context, claims map[string]interface{},
 		return "", fmt.Errorf("claims marshaling failed: %w", err)
 	}
 
-	headerBase64 := base64.RawURLEncoding.WithPadding('=').EncodeToString(headerJSON)
-	claimsBase64 := base64.RawURLEncoding.WithPadding('=').EncodeToString(claimsJSON)
+	headerBase64 := base64.RawURLEncoding.EncodeToString(headerJSON)
+	claimsBase64 := base64.RawURLEncoding.EncodeToString(claimsJSON)
+	singingInput := fmt.Sprintf("%s.%s", headerBase64, claimsBase64)
 
+	hasher := sha256.New()
+	hasher.Write([]byte(singingInput))
+	bs := hasher.Sum(nil)
+
+	// 4. Подписываем хеш через Vault
 	signingData := map[string]interface{}{
-		"input":       claimsBase64,
-		"key_version": keyVersion,
+		"input":          bs,
+		"key_version":    keyVersion,
+		"hash_algorithm": "sha2-256",
+		"prehashed":      true,
+		// For PSS signatures add:
+		"signature_algorithm": "pkcs1v15",
 	}
+
 	secret, err := s.v.Client.Write(ctx, "transit/sign/jwt_keys", signingData)
 	if err != nil {
-		return "", fmt.Errorf("vault signing failed: %w, %s", err, claimsBase64)
+		return "", fmt.Errorf("vault signing failed: %w, %s", err, singingInput)
 	}
 
 	if secret == nil || secret.Data == nil {
@@ -186,6 +198,6 @@ func convertPemToJwk(pemKey string, ver string) (jwk.Key, error) {
 	}
 
 	_ = jwkKey.Set(jwk.KeyIDKey, ver)           // key id
-	_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256) // alg: RS256
+	_ = jwkKey.Set(jwk.AlgorithmKey, jwa.RS256) // alg: PS256
 	return jwkKey, nil
 }

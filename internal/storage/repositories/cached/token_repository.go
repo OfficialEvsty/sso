@@ -96,6 +96,35 @@ func (r *TokenCachedRepository) RevokeRefreshToken(ctx context.Context, refreshT
 	return nil
 }
 
-func (r *TokenCachedRepository) UpdateRefreshToken(ctx context.Context, refreshToken string) error {
-	_, 
+// UpdateRefreshToken updates refresh token by one transaction
+// Transaction method usage to prevent non consistent behaviour
+func (r *TokenCachedRepository) UpdateRefreshToken(ctx context.Context, refreshToken *models.RefreshToken) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, "DELETE FROM refresh_tokens WHERE user_id = $1", refreshToken.UserID)
+	if err != nil {
+		return fmt.Errorf("error while deleting refresh token from database: %w", err)
+	}
+
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`,
+		refreshToken.UserID,
+		refreshToken.Token,
+		refreshToken.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("error while writing refresh token to database: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("error committing transaction: %w", err)
+	}
+
+	_ = r.cache.InvalidateByTag(fmt.Sprintf("%s:%d", tag, refreshToken.UserID))
+	return nil
 }

@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"errors"
+	"fmt"
 	"sso/internal/config"
 	"sso/internal/services/auth/interfaces"
 )
@@ -30,11 +31,11 @@ func (c *ClaimsControllerImpl) IsClaimsValid(token interfaces.ClaimedToken) erro
 	}
 	for _, claim := range c.ClaimKeysByToken[token.Type()] {
 		if !token.HasClaim(claim) {
-			return ErrTokenClaimsIncorrect
+			return fmt.Errorf("%w: %s - doesn't exist", ErrTokenClaimsIncorrect, claim)
 		}
 		val, _ := token.ClaimValue(claim)
 		if val == "" {
-			return ErrTokenClaimsIncorrect
+			return fmt.Errorf("%w: %s - ''", ErrTokenClaimsIncorrect, claim)
 		}
 	}
 	return nil

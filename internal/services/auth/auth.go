@@ -406,7 +406,7 @@ func (a *Auth) RefreshToken(ctx context.Context, token string, clientID interfac
 	}
 
 	// generating access token
-	acsToken, err := a.tokenProvider.MakeAccessToken(ctx, &user, "", session.Session.Scope)
+	acsToken, err := a.tokenProvider.MakeAccessToken(ctx, &user, "currently not implemented", session.Session.Scope)
 	if err != nil {
 		logger.Error("error generating access token: %w", err)
 		return nil, fmt.Errorf("error generating access token: %w", err)
@@ -417,19 +417,14 @@ func (a *Auth) RefreshToken(ctx context.Context, token string, clientID interfac
 		logger.Error("error generating refresh token: %w", err)
 		return nil, fmt.Errorf("error generating refresh token: %w", err)
 	}
-	err = a.tokenStorage.RemoveAllUserTokens(ctx, user.ID)
-	if err != nil {
-		logger.Error("error removing user's refresh tokens: %w", err)
-		return nil, fmt.Errorf("error removing user's refresh tokens: %w", err)
-	}
-	// if error should rollback deleting
-	err = a.tokenStorage.SaveRefreshToken(ctx, newRefreshToken)
-	if err != nil {
-		logger.Error("error saving refresh token: %w", err)
-		return nil, fmt.Errorf("error saving refresh token: %w", err)
-	}
 	// rotating refresh token
-	a.tokenStorage.
+	err = a.tokenStorage.UpdateRefreshToken(ctx, newRefreshToken)
+	if err != nil {
+		logger.Error("error updating refresh token: %w", err)
+		return nil, fmt.Errorf("error updating refresh token: %w", err)
+	}
+	set = a.tokenProvider.MakeTokenSet(nil, acsToken, newRefreshToken)
+	return set, nil
 }
 
 // Login checks if user with given credentials exists in system

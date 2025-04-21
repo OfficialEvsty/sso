@@ -35,5 +35,5 @@ type TokenStorage interface {
 	SaveRefreshToken(context.Context, *models.RefreshToken) error
 	RemoveAllUserTokens(ctx context.Context, userID int64) error
 	RevokeRefreshToken(ctx context.Context, refreshToken string) error
-	UpdateRefreshToken(ctx context.Context, refreshToken string) error
+	UpdateRefreshToken(ctx context.Context, refreshToken *models.RefreshToken) error
 }

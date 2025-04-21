@@ -30,6 +30,7 @@ jwt:
   token_ttls:
     0: 1h
     1: 30m
+    2: 24h
   allowed_claims:
     0:
       - iss
@@ -41,7 +42,7 @@ jwt:
       - is_verified
     1:
       - iss
-      - aud
-      - exp
       - sub
+      - aud
       - scope
+      - exp
