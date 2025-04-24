@@ -35,7 +35,9 @@ func New(
 	port int,
 ) *App {
 	gRPCServer := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.EnvUnaryInterceptor(env)))
+		grpc.UnaryInterceptor(interceptors.EnvUnaryInterceptor(env)),
+		grpc.UnaryInterceptor(interceptors.MetadataInterceptor(log)),
+	)
 
 	authrpc.Register(gRPCServer, authService, verificationService, mailService)
 	sessionrpc.Register(gRPCServer, sessionService)
