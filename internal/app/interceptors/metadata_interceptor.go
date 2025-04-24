@@ -23,7 +23,7 @@ func MetadataInterceptor(logger *slog.Logger) grpc.UnaryServerInterceptor {
 		}
 		var metadataLog string
 		for k, v := range md {
-			metadataLog += fmt.Sprintf("%s: %s\n", k, v)
+			metadataLog += fmt.Sprintf("%s: %s      ", k, v)
 		}
 		logger.With(slog.String("op", op)).Debug(metadataLog)
 		return handler(ctx, req)
