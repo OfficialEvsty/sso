@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sso/internal/storage"
 	"strconv"
+	"strings"
 )
 
 // GetUserSession support func for extracting session id from metadata
@@ -16,16 +17,18 @@ func GetUserSession(ctx context.Context, logger *slog.Logger) (string, error) {
 		return "", storage.ErrNoMetadataContext
 	}
 	// if gateway unsupported key session_cookie cause slice can be empty that throws panic
-	sessionIDs := md.Get("session_cookie")
-	if len(sessionIDs) == 0 {
-		logger.Error("no session found in metadata, cause gateway problem with setup necessary session key")
+	cookies := md.Get("cookie")
+	if len(cookies) == 0 {
+		logger.Error("no cookies found in metadata, cause gateway problem with setup necessary session key")
 		return "", storage.InfoSessionNotFound
 	}
-	sessionID := sessionIDs[0]
-	// if session haven't provided
-	if sessionID == "" {
-		logger.Info("user unauthenticated", slog.String("session_id", sessionID))
-		return "", storage.InfoUserUnauthenticated
+	cookieKey := "session="
+	for _, cookie := range cookies {
+		index := strings.Index(cookie, cookieKey)
+		if index != -1 {
+			return cookie[index+len(cookieKey):], nil
+		}
 	}
-	return sessionID, nil
+	logger.Info("user unauthenticated")
+	return "", storage.InfoUserUnauthenticated
 }

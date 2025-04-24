@@ -17,7 +17,7 @@ func GetClientIPFromMetadata(ctx context.Context, logger *slog.Logger) (string, 
 		return "", storage.ErrNoMetadataContext
 	}
 
-	ips := md.Get("client_ip")
+	ips := md.Get("x-forwarded-for")
 	if len(ips) == 0 {
 		logger.Error("error while receiving metadata from context", slog.String("client_ip", "len 0"))
 		return "", storage.ErrKeyNotFound
