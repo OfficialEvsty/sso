@@ -119,12 +119,16 @@ services:
       - ${SSO_PORT}:${SSO_PORT}
     networks:
       - sso-network
+      - shared-net
 volumes:
   pgdata:
     driver: local
 networks:
   sso-network:
     driver: bridge
+  shared-net:
+    driver: bridge
+    external: true
 secrets:
   role_id:
     file: ./secrets/role_id.txt
