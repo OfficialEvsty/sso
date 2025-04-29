@@ -179,7 +179,7 @@ func (a *Auth) AuthorizeByCurrentSession(ctx context.Context, scope string, pkce
 func (a *Auth) AuthorizeByLogin(ctx context.Context, clientID interface{}, redirectUri string, scope string, pkce *models.PKCE, state string) (string, string, error) {
 	const op = "auth.AuthorizeByLogin"
 	logger := a.log.With(slog.String("op", op))
-	const loginRouteName = "oauth"
+	const loginRouteName = "auth"
 	loginRedirect := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), loginRouteName)
 	// checks if ipv4 provided
 	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
