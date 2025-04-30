@@ -437,7 +437,7 @@ func (a *Auth) Login(
 	password string,
 ) (string, error) {
 	const op = "auth.Login"
-
+	const redirectRouteName = "redirect"
 	env := utilities.EnvFromContext(ctx)
 	logger := a.log.With(
 		slog.String("op", op),
@@ -471,9 +471,6 @@ func (a *Auth) Login(
 	}
 
 	logger.Info("user logged in successfully")
-
-	const redirectRouteName = "redirect"
-	redirectUri := fmt.Sprintf("https://%s:%s/%s", os.Getenv("WEB_CLIENT_DOMAIN"), os.Getenv("WEB_CLIENT_PORT"), redirectRouteName)
 	// extract sessionID from cookies and validates session
 	sessionID, err := utilities.GetUserSession(ctx, logger)
 	if err != nil {
@@ -485,8 +482,9 @@ func (a *Auth) Login(
 			return "", err
 		}
 		// todo буквально не знаю что в этом случае делать, но нужно перессылать на главную страницу приложения, чтобы он стучался оттуда
-		return redirectUri, fmt.Errorf("error while getting session from db: %w", err)
+		return "", fmt.Errorf("error while getting session from db: %w", err)
 	}
+
 	// todo сессия может быть просрочена, но так как это сессия пустышка, то не пугаемся (но не знаем что делать)
 	// --extract client's IP and saves it as trusted IP address (make it step when exchange auth code on tokens)
 	clientIP, err := utilities.GetClientIPFromMetadata(ctx, logger)
@@ -499,6 +497,7 @@ func (a *Auth) Login(
 		return "", err
 	}
 	logger.Debug("session's metadata successfully received", slog.String("sessionID", sessionID))
+	redirectUri := fmt.Sprintf("%s/%s", sessionMetadata.RedirectUri, redirectRouteName)
 	stateParam := sessionMetadata.State
 	// create an authorization code and saves it
 	authCode := &models.AuthorizationCode{
