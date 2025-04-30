@@ -437,7 +437,6 @@ func (a *Auth) Login(
 	password string,
 ) (string, error) {
 	const op = "auth.Login"
-	const redirectRouteName = "redirect"
 	env := utilities.EnvFromContext(ctx)
 	logger := a.log.With(
 		slog.String("op", op),
@@ -497,7 +496,7 @@ func (a *Auth) Login(
 		return "", err
 	}
 	logger.Debug("session's metadata successfully received", slog.String("sessionID", sessionID))
-	redirectUri := fmt.Sprintf("%s/%s", sessionMetadata.RedirectUri, redirectRouteName)
+	redirectUri := fmt.Sprintf("%s/%s", sessionMetadata.RedirectUri)
 	stateParam := sessionMetadata.State
 	// create an authorization code and saves it
 	authCode := &models.AuthorizationCode{
